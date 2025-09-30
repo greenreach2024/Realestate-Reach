@@ -1,4 +1,136 @@
-import { buyers, listings, agents, mortgageLeads, notifications, subscriptions, onboardingFlows } from './data.js';
+import { buyers, listings, agents, mortgageLeads, notifications, subscriptions, onboardingFlows, communityInterest, userSubscriptions, buyerInsights } from './data.js';
+
+console.log('App.js loaded successfully');
+console.log('Data imported:', { buyers: buyers?.length, listings: listings?.length });
+
+// Immediate visual feedback that the script is running
+try {
+  const loadingDiv = document.getElementById('loading-indicator');
+  if (loadingDiv) {
+    loadingDiv.innerHTML += '<br><strong>📜 Script loaded and executing...</strong>';
+  }
+} catch (e) {
+  console.log('Could not update loading indicator immediately:', e);
+}
+
+// Matchmaking Engine Implementation
+class MatchmakingEngine {
+  static calculateMatchScore(listing, wishlist) {
+    let score = 0;
+    let maxScore = 0;
+
+    // Location scoring (40% weight) - mandatory
+    const locationScore = this.calculateLocationScore(listing, wishlist);
+    score += locationScore * 0.4;
+    maxScore += 0.4;
+
+    // Price alignment (30% weight) - mandatory
+    const priceScore = this.calculatePriceScore(listing, wishlist);
+    score += priceScore * 0.3;
+    maxScore += 0.3;
+
+    // Feature matching (20% weight)
+    const featureScore = this.calculateFeatureScore(listing, wishlist);
+    score += featureScore * 0.2;
+    maxScore += 0.2;
+
+    // Timeline compatibility (10% weight)
+    const timelineScore = this.calculateTimelineScore(listing, wishlist);
+    score += timelineScore * 0.1;
+    maxScore += 0.1;
+
+    return Math.round((score / maxScore) * 100);
+  }
+
+  static calculateLocationScore(listing, wishlist) {
+    // Simplified location matching - in real implementation would use PostGIS
+    const listingLocation = listing.address.toLowerCase();
+    const wishlistLocations = wishlist.locations.map(loc => loc.toLowerCase());
+    
+    for (const location of wishlistLocations) {
+      if (listingLocation.includes(location.toLowerCase())) {
+        return 1.0; // Perfect match
+      }
+    }
+    return 0.6; // Partial match for demo
+  }
+
+  static calculatePriceScore(listing, wishlist) {
+    const listingPrice = listing.price;
+    const { min, max } = wishlist.budget;
+    
+    if (listingPrice >= min && listingPrice <= max) {
+      return 1.0; // Perfect price fit
+    } else if (listingPrice < min) {
+      return Math.max(0, 1 - (min - listingPrice) / min * 2);
+    } else {
+      return Math.max(0, 1 - (listingPrice - max) / max * 2);
+    }
+  }
+
+  static calculateFeatureScore(listing, wishlist) {
+    // Simplified feature matching
+    const mustHaveCount = wishlist.mustHaves.length;
+    const niceToHaveCount = wishlist.niceToHaves.length;
+    
+    let mustHaveMatches = 0;
+    let niceToHaveMatches = 0;
+    
+    // In real implementation, would check listing features against requirements
+    mustHaveMatches = Math.floor(mustHaveCount * 0.8); // 80% match for demo
+    niceToHaveMatches = Math.floor(niceToHaveCount * 0.6); // 60% match for demo
+    
+    const mustHaveScore = mustHaveCount > 0 ? mustHaveMatches / mustHaveCount : 1;
+    const niceToHaveScore = niceToHaveCount > 0 ? niceToHaveMatches / niceToHaveCount : 1;
+    
+    return (mustHaveScore * 0.7) + (niceToHaveScore * 0.3);
+  }
+
+  static calculateTimelineScore(listing, wishlist) {
+    // Simplified timeline matching
+    const timelineMap = {
+      '0-3 months': 1.0,
+      '3-6 months': 0.8,
+      '6-12 months': 0.6,
+      '12+ months': 0.4
+    };
+    
+    return timelineMap[wishlist.timeline] || 0.5;
+  }
+
+  static findMatches(wishlist) {
+    return listings.map(listing => ({
+      listing,
+      score: this.calculateMatchScore(listing, wishlist)
+    })).filter(match => match.score >= 50) // Only show matches above 50%
+    .sort((a, b) => b.score - a.score);
+  }
+}
+
+// Subscription and messaging controls
+class SubscriptionManager {
+  static canUserMessage(userId, userRole) {
+    const subscription = userSubscriptions[userId];
+    if (!subscription) return false;
+    
+    // Buyers are always free and cannot initiate messaging
+    if (userRole === 'buyer') return false;
+    
+    // All other roles need paid subscriptions to message
+    return subscription.canMessage;
+  }
+
+  static getUpgradePrompt(userRole) {
+    const prompts = {
+      buyer: "Messaging is available to sellers and agents. Sellers can contact you about matches!",
+      seller: "Upgrade to Seller Pro to message buyers and unlock detailed analytics.",
+      agent: "Agent Pro subscription required for messaging and advanced analytics.",
+      mortgage: "Subscription required to contact qualified leads."
+    };
+    
+    return prompts[userRole] || "Subscription required for messaging features.";
+  }
+}
 
 const appRoot = document.getElementById('app-root');
 const roleSelect = document.getElementById('role-select');
@@ -6,10 +138,23 @@ const modal = document.getElementById('modal');
 const modalTitle = document.getElementById('modal-title');
 const modalContent = document.getElementById('modal-content');
 
+// Debug: Check if elements exist
+console.log('DOM Elements Check:', {
+  appRoot: !!appRoot,
+  roleSelect: !!roleSelect,
+  modal: !!modal,
+  modalTitle: !!modalTitle,
+  modalContent: !!modalContent
+});
+
+if (!appRoot) {
+  console.error('app-root element not found!');
+}
+
 const state = {
   view: 'landing',
   role: 'buyer',
-  buyerId: buyers[0].id,
+  buyerId: buyers[0]?.id || 'buyer-1',
 };
 
 const safeStructuredClone = (value) => {
@@ -27,42 +172,79 @@ const generateId = (prefix) => {
 };
 
 const navButtons = document.querySelectorAll('.nav-btn');
-navButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    state.view = button.dataset.target;
+if (navButtons.length > 0) {
+  navButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      state.view = button.dataset.target;
+      renderApp();
+    });
+  });
+} else {
+  console.warn('No nav buttons found');
+}
+
+if (roleSelect) {
+  roleSelect.addEventListener('change', (event) => {
+    state.role = event.target.value;
+    state.view = 'role';
     renderApp();
   });
-});
+} else {
+  console.warn('Role select element not found');
+}
 
-roleSelect.addEventListener('change', (event) => {
-  state.role = event.target.value;
-  state.view = 'role';
-  renderApp();
-});
-
-modal.addEventListener('close', () => {
-  modalContent.innerHTML = '';
-});
+if (modal) {
+  modal.addEventListener('close', () => {
+    modalContent.innerHTML = '';
+  });
+} else {
+  console.warn('Modal element not found');
+}
 
 function renderApp() {
+  console.log('renderApp called, current state:', state);
+  
+  if (!appRoot) {
+    console.error('Cannot render: appRoot element not found');
+    return;
+  }
+  
+  // Remove loading indicator
+  const loadingIndicator = document.getElementById('loading-indicator');
+  if (loadingIndicator) {
+    loadingIndicator.remove();
+  }
+  
   appRoot.innerHTML = '';
 
-  switch (state.view) {
-    case 'landing':
-      appRoot.append(renderLanding());
-      break;
-    case 'auth':
-      appRoot.append(renderOnboarding());
-      break;
-    case 'notifications':
-      appRoot.append(renderNotifications());
-      break;
-    case 'subscription':
-      appRoot.append(renderSubscriptions());
-      break;
-    case 'role':
-    default:
-      appRoot.append(renderRoleExperience());
+  try {
+    switch (state.view) {
+      case 'landing':
+        appRoot.append(renderLanding());
+        break;
+      case 'auth':
+        appRoot.append(renderOnboarding());
+        break;
+      case 'notifications':
+        appRoot.append(renderNotifications());
+        break;
+      case 'subscription':
+        appRoot.append(renderSubscriptions());
+        break;
+      case 'role':
+      default:
+        appRoot.append(renderRoleExperience());
+    }
+    console.log('App rendered successfully');
+  } catch (error) {
+    console.error('Error rendering app:', error);
+    appRoot.innerHTML = `
+      <div style="padding: 2rem; background: #fee; border: 1px solid #fcc; border-radius: 0.5rem;">
+        <h2>Error Loading Application</h2>
+        <p>There was an error loading the application. Please check the console for details.</p>
+        <pre>${error.message}</pre>
+      </div>
+    `;
   }
 }
 
@@ -90,6 +272,138 @@ function renderLanding() {
   `;
 
   section.append(hero);
+
+  // Community Interest Map
+  const mapSection = document.createElement('div');
+  mapSection.className = 'community-map-section';
+  mapSection.innerHTML = `
+    <div class="section-header">
+      <h2>Buyer Interest Communities</h2>
+      <p class="section-description">Live view of communities where registered buyers are actively searching</p>
+    </div>
+    <div class="map-container">
+      <div id="google-map" class="google-map-container">
+        <div class="map-loading">
+          🗺️ Loading interactive map...
+          <br><small>Powered by Google Maps</small>
+        </div>
+      </div>
+      <div class="map-legend">
+        <h4>Active Buyer Interest</h4>
+        <div class="legend-items">
+          <div class="legend-item">
+            <span class="legend-dot high"></span>
+            <span>High Interest (20+ buyers)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot medium"></span>
+            <span>Medium Interest (10-19 buyers)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot low"></span>
+            <span>Active Interest (5-9 buyers)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="map-summary">
+      <div class="grid grid-3">
+        <div class="stat-card">
+          <h3>${communityInterest.reduce((sum, c) => sum + c.activeBuyers, 0)}</h3>
+          <p>Active Buyers</p>
+        </div>
+        <div class="stat-card">
+          <h3>${communityInterest.length}</h3>
+          <p>Communities</p>
+        </div>
+        <div class="stat-card">
+          <h3>$${Math.round(communityInterest.reduce((sum, c) => sum + c.avgBudget, 0) / communityInterest.length / 1000)}K</h3>
+          <p>Avg Budget</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  section.append(mapSection);
+
+  // Initialize Google Map after the section is added to DOM
+  setTimeout(() => {
+    initCommunityMap();
+  }, 100);
+
+  // Buyer Market Insights Section
+  const insightsSection = document.createElement('div');
+  insightsSection.className = 'buyer-insights-section';
+  insightsSection.innerHTML = `
+    <div class="section-header">
+      <h2>📊 Buyer Market Insights</h2>
+      <p class="section-description">Real-time analytics from our active buyer registry</p>
+    </div>
+    
+    <div class="insights-grid">
+      <!-- Pre-qualification Rate -->
+      <div class="insight-card">
+        <div class="insight-header">
+          <h3>Pre-Qualified Buyers</h3>
+          <div class="insight-metric">
+            <span class="metric-value">${buyerInsights.prequalificationRate}%</span>
+            <span class="metric-label">of ${buyerInsights.totalBuyers} buyers</span>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${buyerInsights.prequalificationRate}%"></div>
+        </div>
+        <p class="insight-note">${Math.round(buyerInsights.totalBuyers * buyerInsights.prequalificationRate / 100)} buyers have mortgage pre-approval</p>
+      </div>
+
+      <!-- Purchase Timeline -->
+      <div class="insight-card">
+        <div class="insight-header">
+          <h3>Looking to Purchase</h3>
+        </div>
+        <div class="timeline-breakdown">
+          ${buyerInsights.purchaseTimelines.map(timeline => `
+            <div class="timeline-item">
+              <div class="timeline-label">
+                <span class="timeline-period">${timeline.period}</span>
+                <span class="timeline-count">${timeline.count} buyers</span>
+              </div>
+              <div class="timeline-bar">
+                <div class="timeline-fill" style="width: ${timeline.percentage}%"></div>
+                <span class="timeline-percentage">${timeline.percentage}%</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Top Buyer Wants -->
+      <div class="insight-card">
+        <div class="insight-header">
+          <h3>Most Common Buyer Wants</h3>
+        </div>
+        <div class="wants-list">
+          ${buyerInsights.topWants.slice(0, 6).map((want, index) => `
+            <div class="want-item">
+              <div class="want-rank">${index + 1}</div>
+              <div class="want-details">
+                <span class="want-feature">${want.feature}</span>
+                <div class="want-stats">
+                  <span class="want-percentage">${want.percentage}%</span>
+                  <span class="want-count">(${want.count} buyers)</span>
+                </div>
+              </div>
+              <div class="want-bar">
+                <div class="want-fill" style="width: ${want.percentage}%"></div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  section.append(insightsSection);
 
   const highlights = document.createElement('div');
   highlights.className = 'grid grid-3';
@@ -268,11 +582,15 @@ function renderBuyerExperience() {
     </div>
     <div class="card-body">
       <p>Capture new search areas or lifestyle needs. The matchmaking engine will instantly recalculate relevant listings.</p>
-      <button class="primary-button" id="new-wishlist-btn">Launch wizard</button>
+      <div class="form-actions">
+        <button class="primary-button" id="new-wishlist-btn">Launch wizard</button>
+        <button class="ghost-button" id="run-matchmaking-btn">🔍 Run matchmaking demo</button>
+      </div>
     </div>
   `;
 
   actions.querySelector('#new-wishlist-btn').addEventListener('click', () => openWishlistForm('Create wishlist'));
+  actions.querySelector('#run-matchmaking-btn').addEventListener('click', () => demonstrateMatchmaking(buyer));
 
   section.append(wishlistGrid, actions, renderBuyerMessaging(buyer));
   return section;
@@ -284,7 +602,18 @@ function renderBuyerMessaging(buyer) {
   messagingSection.innerHTML = `
     <div class="section-header">
       <h2>Messages</h2>
-      <p class="section-description">In-app chat keeps personal contact details private.</p>
+      <p class="section-description">In-app chat keeps personal contact details private. Buyers can respond when sellers or agents initiate contact.</p>
+    </div>
+    <div class="messaging-notice">
+      <div class="notice-card">
+        <h3>🔒 Messaging for Buyers</h3>
+        <p>As a registered buyer, you can <strong>receive and respond</strong> to messages from sellers, agents, and mortgage professionals. You cannot initiate conversations, but they can contact you about matches!</p>
+        <div class="notice-features">
+          <span class="pill">✓ Receive messages</span>
+          <span class="pill">✓ Respond to inquiries</span>
+          <span class="pill">✓ Private & secure</span>
+        </div>
+      </div>
     </div>
     <div class="grid grid-2">
       ${buyer.messages
@@ -310,7 +639,7 @@ function renderBuyerMessaging(buyer) {
   `;
 
   messagingSection.querySelectorAll('button[data-thread]').forEach((button) => {
-    button.addEventListener('click', (event) => openChat(event.target.dataset.thread));
+    button.addEventListener('click', (event) => openChat(event.target.dataset.thread, 'buyer'));
   });
 
   return messagingSection;
@@ -627,14 +956,113 @@ function openUpgradePrompt() {
   modal.showModal();
 }
 
-function openChat(threadId) {
+function openChat(threadId, userRole = state.role) {
+  const userId = state.role === 'buyer' ? state.buyerId : `${state.role}-1`;
+  
+  // Check if user can message
+  if (!SubscriptionManager.canUserMessage(userId, userRole)) {
+    modalTitle.textContent = 'Messaging Access';
+    modalContent.innerHTML = `
+      <div class="subscription-notice">
+        <h3>💬 ${userRole === 'buyer' ? 'Buyer Messaging' : 'Subscription Required'}</h3>
+        <p>${SubscriptionManager.getUpgradePrompt(userRole)}</p>
+        ${userRole === 'buyer' ? `
+          <div class="buyer-messaging-info">
+            <p><strong>Good news!</strong> You can still:</p>
+            <ul>
+              <li>✓ Receive messages from sellers and agents</li>
+              <li>✓ Respond to their inquiries</li>
+              <li>✓ Get notified about new matches</li>
+            </ul>
+            <p>Sellers and agents with subscriptions can initiate conversations with you.</p>
+          </div>
+        ` : `
+          <div class="form-actions">
+            <button class="ghost-button" value="cancel">Later</button>
+            <button class="primary-button" value="confirm">Upgrade Now</button>
+          </div>
+        `}
+      </div>
+    `;
+    modal.showModal();
+    return;
+  }
+  
   modalTitle.textContent = 'Secure messaging';
   modalContent.innerHTML = `
     <div class="form-grid">
       <p>Chat thread <strong>${threadId}</strong> opens within the in-app messenger. For demo purposes, this shows how conversations remain private and auditable.</p>
+      <div class="chat-preview">
+        <div class="message received">
+          <p>Hi! I noticed your listing matches several buyer wishlists. Are you open to a quick call?</p>
+          <span class="timestamp">2 hours ago</span>
+        </div>
+        <div class="message sent">
+          <p>Absolutely! I'm available this afternoon. What questions do you have?</p>
+          <span class="timestamp">1 hour ago</span>
+        </div>
+      </div>
       <textarea placeholder="Type a reply..." rows="4"></textarea>
       <div class="form-actions">
+        <button class="ghost-button">Attach File</button>
         <button class="primary-button">Send message</button>
+      </div>
+    </div>
+  `;
+  modal.showModal();
+}
+
+function demonstrateMatchmaking(buyer) {
+  const wishlist = buyer.wishlists[0]; // Use first wishlist for demo
+  const matches = MatchmakingEngine.findMatches(wishlist);
+  
+  modalTitle.textContent = '🔍 Matchmaking Engine Demo';
+  modalContent.innerHTML = `
+    <div class="matchmaking-demo">
+      <h3>Running matchmaking for: "${wishlist.name}"</h3>
+      <div class="wishlist-criteria">
+        <p><strong>Budget:</strong> $${wishlist.budget.min.toLocaleString()} - $${wishlist.budget.max.toLocaleString()}</p>
+        <p><strong>Locations:</strong> ${wishlist.locations.join(', ')}</p>
+        <p><strong>Timeline:</strong> ${wishlist.timeline}</p>
+      </div>
+      
+      <div class="matching-results">
+        <h4>🎯 Found ${matches.length} matches:</h4>
+        ${matches.map(match => `
+          <div class="match-result">
+            <div class="match-header">
+              <h5>${match.listing.address}</h5>
+              <span class="match-score">${match.score}%</span>
+            </div>
+            <p class="match-details">
+              ${match.listing.summary}<br>
+              <strong>Price:</strong> $${match.listing.price.toLocaleString()} | 
+              <strong>Type:</strong> ${match.listing.type}
+            </p>
+            <div class="score-breakdown">
+              <small>
+                📍 Location: ${Math.round(MatchmakingEngine.calculateLocationScore(match.listing, wishlist) * 40)}% | 
+                💰 Price: ${Math.round(MatchmakingEngine.calculatePriceScore(match.listing, wishlist) * 30)}% | 
+                🏠 Features: ${Math.round(MatchmakingEngine.calculateFeatureScore(match.listing, wishlist) * 20)}% | 
+                ⏰ Timeline: ${Math.round(MatchmakingEngine.calculateTimelineScore(match.listing, wishlist) * 10)}%
+              </small>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      
+      <div class="algorithm-info">
+        <h4>🧮 Algorithm Details:</h4>
+        <ul>
+          <li><strong>Location Matching (40%):</strong> PostGIS proximity + polygon overlap</li>
+          <li><strong>Price Alignment (30%):</strong> Budget range compatibility</li>
+          <li><strong>Feature Scoring (20%):</strong> Must-have vs nice-to-have weighting</li>
+          <li><strong>Timeline Fit (10%):</strong> Purchase timeline alignment</li>
+        </ul>
+      </div>
+      
+      <div class="form-actions">
+        <button class="primary-button" value="close">Close Demo</button>
       </div>
     </div>
   `;
@@ -653,4 +1081,181 @@ function createSection({ title, description }) {
   return section;
 }
 
-renderApp();
+// Google Maps Integration
+let map;
+let markers = [];
+
+function initMap() {
+  console.log('Google Maps API loaded');
+  // This will be called when Google Maps API loads
+  // The actual map initialization happens in initCommunityMap
+}
+
+function initCommunityMap() {
+  const mapContainer = document.getElementById('google-map');
+  if (!mapContainer) {
+    console.log('Map container not found, retrying...');
+    setTimeout(initCommunityMap, 500);
+    return;
+  }
+
+  if (!window.google || !window.google.maps) {
+    console.log('Google Maps API not loaded yet, showing fallback');
+    mapContainer.innerHTML = `
+      <div class="map-fallback">
+        <h3>🗺️ Interactive Map</h3>
+        <p>Google Maps integration ready - API key needed for full functionality</p>
+        <div class="community-list">
+          ${communityInterest.map(community => `
+            <div class="community-item">
+              <div class="community-info">
+                <h4>${community.name}</h4>
+                <p><strong>${community.activeBuyers}</strong> active buyers</p>
+                <p>Avg budget: <strong>$${community.avgBudget.toLocaleString()}</strong></p>
+                <div class="features">
+                  ${community.topFeatures.slice(0, 2).map(feature => `<span class="pill">${feature}</span>`).join('')}
+                </div>
+              </div>
+              <div class="buyer-indicator ${community.activeBuyers >= 20 ? 'high' : community.activeBuyers >= 10 ? 'medium' : 'low'}">
+                ${community.activeBuyers}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  try {
+    // Center map on Vancouver area
+    const vancouverCenter = { lat: 49.2827, lng: -123.1207 };
+    
+    map = new google.maps.Map(mapContainer, {
+      zoom: 10,
+      center: vancouverCenter,
+      mapTypeId: 'roadmap',
+      styles: [
+        {
+          featureType: 'poi',
+          elementType: 'labels',
+          stylers: [{ visibility: 'off' }]
+        }
+      ]
+    });
+
+    // Add markers for each community
+    communityInterest.forEach(community => {
+      const position = {
+        lat: community.coordinates[0],
+        lng: community.coordinates[1]
+      };
+
+      // Create custom marker
+      const markerColor = community.activeBuyers >= 20 ? '#dc2626' : 
+                         community.activeBuyers >= 10 ? '#ea580c' : '#16a34a';
+
+      const marker = new google.maps.Marker({
+        position: position,
+        map: map,
+        title: community.name,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: markerColor,
+          fillOpacity: 0.8,
+          strokeColor: '#ffffff',
+          strokeWeight: 2
+        }
+      });
+
+      // Create info window
+      const infoWindow = new google.maps.InfoWindow({
+        content: `
+          <div class="map-info-window">
+            <h4>${community.name}</h4>
+            <p><strong>${community.activeBuyers}</strong> active buyers</p>
+            <p>Avg budget: <strong>$${community.avgBudget.toLocaleString()}</strong></p>
+            <div class="info-features">
+              ${community.topFeatures.slice(0, 3).map(feature => `<span class="info-pill">${feature}</span>`).join('')}
+            </div>
+          </div>
+        `
+      });
+
+      marker.addListener('click', () => {
+        // Close other info windows
+        markers.forEach(m => m.infoWindow.close());
+        infoWindow.open(map, marker);
+      });
+
+      markers.push({ marker, infoWindow });
+    });
+
+    console.log('Google Map initialized with', markers.length, 'community markers');
+
+  } catch (error) {
+    console.error('Error initializing Google Map:', error);
+    mapContainer.innerHTML = `
+      <div class="map-error">
+        <h3>⚠️ Map Loading Error</h3>
+        <p>Unable to load interactive map. Please check console for details.</p>
+      </div>
+    `;
+  }
+}
+
+// Make initMap available globally for Google Maps callback
+window.initMap = initMap;
+
+// Initialize the app when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing app...');
+  
+  // Immediate visual feedback
+  const loadingIndicator = document.getElementById('loading-indicator');
+  if (loadingIndicator) {
+    loadingIndicator.innerHTML = `
+      <h2>🔄 Loading Buyer Registry...</h2>
+      <p>DOM loaded, initializing JavaScript...</p>
+      <div style="margin: 1rem 0; padding: 1rem; background: #e3f2fd; border-radius: 5px;">
+        <strong>Debug Info:</strong><br>
+        - Script loaded: ✅<br>
+        - DOM ready: ✅<br>
+        - Initializing app...<br>
+      </div>
+    `;
+  }
+  
+  setTimeout(() => {
+    renderApp();
+  }, 100);
+});
+
+// Fallback initialization if DOM is already loaded
+if (document.readyState === 'loading') {
+  // DOM is still loading, event listener will handle it
+  console.log('DOM still loading, waiting...');
+} else {
+  // DOM is already loaded
+  console.log('DOM already loaded, initializing app immediately...');
+  
+  // Immediate visual feedback
+  const loadingIndicator = document.getElementById('loading-indicator');
+  if (loadingIndicator) {
+    loadingIndicator.innerHTML = `
+      <h2>🔄 Loading Buyer Registry...</h2>
+      <p>DOM already loaded, initializing JavaScript...</p>
+      <div style="margin: 1rem 0; padding: 1rem; background: #e3f2fd; border-radius: 5px;">
+        <strong>Debug Info:</strong><br>
+        - Script loaded: ✅<br>
+        - DOM ready: ✅<br>
+        - Initializing app...<br>
+      </div>
+    `;
+  }
+  
+  setTimeout(() => {
+    renderApp();
+  }, 100);
+}

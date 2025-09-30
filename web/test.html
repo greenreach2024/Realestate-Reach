@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body>
+    <h1>Test Page</h1>
+    <p>If you can see this, the server is working.</p>
+    <div id="js-test">JavaScript not loaded</div>
+    
+    <script>
+        console.log('Test script running');
+        document.getElementById('js-test').textContent = 'JavaScript is working!';
+        
+        // Test module import
+        import('./data.js').then(data => {
+            console.log('Data module loaded:', data);
+            document.getElementById('js-test').textContent += ' Data module loaded successfully.';
+        }).catch(error => {
+            console.error('Error loading data module:', error);
+            document.getElementById('js-test').textContent += ' Error loading data module: ' + error.message;
+        });
+    </script>
+</body>
+</html>

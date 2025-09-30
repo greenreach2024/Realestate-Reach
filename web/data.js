@@ -1,7 +1,75 @@
+// Community interest data for the homepage map
+export const communityInterest = [
+  { 
+    name: 'Port Moody Centre', 
+    coordinates: [49.2837, -122.8434], 
+    activeBuyers: 14, 
+    avgBudget: 1180000,
+    topFeatures: ['EV charging', 'Home office', 'Transit access']
+  },
+  { 
+    name: 'Coal Harbour', 
+    coordinates: [49.2944, -123.1289], 
+    activeBuyers: 22, 
+    avgBudget: 920000,
+    topFeatures: ['Water view', 'Concierge', 'Walking distance']
+  },
+  { 
+    name: 'Olympic Village', 
+    coordinates: [49.2644, -123.1147], 
+    activeBuyers: 18, 
+    avgBudget: 875000,
+    topFeatures: ['Modern amenities', 'Seawall access', 'Pet-friendly']
+  },
+  { 
+    name: 'Langley', 
+    coordinates: [49.1666, -122.6445], 
+    activeBuyers: 31, 
+    avgBudget: 950000,
+    topFeatures: ['Family-friendly', 'Newer builds', 'Good schools']
+  },
+  { 
+    name: 'Burnaby Heights', 
+    coordinates: [49.2666, -123.0145], 
+    activeBuyers: 12, 
+    avgBudget: 1050000,
+    topFeatures: ['Character homes', 'Local shops', 'Transit']
+  }
+];
+
+// Buyer market insights for homepage
+export const buyerInsights = {
+  prequalificationRate: 67, // % of buyers who are pre-qualified
+  totalBuyers: 97,
+  purchaseTimelines: [
+    { period: 'Now', percentage: 18, count: 17 },
+    { period: '3 months', percentage: 35, count: 34 },
+    { period: '6 months', percentage: 28, count: 27 },
+    { period: 'This year', percentage: 19, count: 19 }
+  ],
+  topWants: [
+    { feature: 'Close to schools', percentage: 42, count: 41 },
+    { feature: '4+ bedrooms', percentage: 38, count: 37 },
+    { feature: '3+ bathrooms', percentage: 35, count: 34 },
+    { feature: 'Home office', percentage: 31, count: 30 },
+    { feature: 'EV charging', percentage: 28, count: 27 },
+    { feature: 'Transit access', percentage: 26, count: 25 }
+  ]
+};
+
+// User subscription status tracking
+export const userSubscriptions = {
+  'buyer-1': { role: 'buyer', tier: 'free', canMessage: false },
+  'seller-1': { role: 'seller', tier: 'pro', canMessage: true },
+  'agent-1': { role: 'agent', tier: 'pro', canMessage: true },
+  'mortgage-1': { role: 'mortgage', tier: 'paid', canMessage: true }
+};
+
 export const buyers = [
   {
     id: 'buyer-1',
     name: 'Taylor Kim',
+    subscription: 'free',
     wishlists: [
       {
         id: 'wishlist-1',
