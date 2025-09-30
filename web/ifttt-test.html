@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFTTT Integration Test</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: #f8fafc;
+        }
+        .test-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #0ea5e9;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 0.5rem;
+            font-weight: 600;
+        }
+        button:hover {
+            background: #0284c7;
+        }
+        .status {
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+        }
+        .success { background: #dcfce7; color: #166534; }
+        .error { background: #fef2f2; color: #dc2626; }
+        .info { background: #e0f2fe; color: #0369a1; }
+    </style>
+</head>
+<body>
+    <h1>🔗 IFTTT Integration Test</h1>
+    
+    <div class="test-section">
+        <h2>IFTTT Configuration</h2>
+        <div class="status info">
+            <strong>Webhook URL:</strong> https://maker.ifttt.com/use/BwqhI7ZBqzhcyPP8np0Ij<br>
+            <strong>Status:</strong> ✅ Configured and Ready
+        </div>
+        
+        <h3>Available Events:</h3>
+        <ul>
+            <li><code>new_buyer_registered</code> - Triggered when buyers join the platform</li>
+            <li><code>buyer_property_match</code> - High-quality property matches (80%+)</li>
+            <li><code>subscription_message_sent</code> - Messages between users</li>
+            <li><code>community_interest_updated</code> - Community buyer activity changes</li>
+            <li><code>price_alert_triggered</code> - Property price changes</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>Test IFTTT Triggers</h2>
+        <p>Click the buttons below to test different IFTTT events:</p>
+        
+        <button onclick="testNewBuyer()">🏠 Test New Buyer Registration</button>
+        <button onclick="testPropertyMatch()">🎯 Test Property Match</button>
+        <button onclick="testMessage()">💬 Test Message Notification</button>
+        <button onclick="testCommunityUpdate()">🗺️ Test Community Update</button>
+        <button onclick="testPriceAlert()">💰 Test Price Alert</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Integration Examples</h2>
+        <p><strong>Sample IFTTT Applets you can create:</strong></p>
+        <ul>
+            <li>📧 Send email when new buyers register</li>
+            <li>📱 Send SMS for high-quality property matches</li>
+            <li>📊 Log buyer activity to Google Sheets</li>
+            <li>🔔 Send Slack notifications for community updates</li>
+            <li>📈 Create calendar events for price alerts</li>
+        </ul>
+    </div>
+
+    <script type="module">
+        import { iftttConfig } from './data.js';
+
+        class IFTTTService {
+            constructor(config) {
+                this.config = config;
+                this.webhookUrl = config.webhookUrl;
+                this.events = config.events;
+            }
+
+            async triggerEvent(eventType, data = {}) {
+                try {
+                    const eventName = this.events[eventType];
+                    if (!eventName) {
+                        throw new Error(`Unknown event type: ${eventType}`);
+                    }
+
+                    const payload = {
+                        value1: data.title || eventType,
+                        value2: data.description || JSON.stringify(data),
+                        value3: data.metadata || new Date().toISOString()
+                    };
+
+                    const url = `${this.webhookUrl}/${eventName}`;
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        return { success: true, event: eventName, payload };
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                } catch (error) {
+                    return { success: false, error: error.message };
+                }
+            }
+        }
+
+        const iftttService = new IFTTTService(iftttConfig);
+        const results = document.getElementById('results');
+
+        function showResult(result, testName) {
+            const div = document.createElement('div');
+            div.className = `status ${result.success ? 'success' : 'error'}`;
+            div.innerHTML = `
+                <strong>${testName}:</strong> ${result.success ? '✅ Success' : '❌ Failed'}<br>
+                ${result.success ? 
+                    `Event: ${result.event}<br>Payload: ${JSON.stringify(result.payload, null, 2)}` : 
+                    `Error: ${result.error}`
+                }
+            `;
+            results.appendChild(div);
+        }
+
+        window.testNewBuyer = async () => {
+            const result = await iftttService.triggerEvent('newBuyerRegistration', {
+                title: 'Test New Buyer: John Doe',
+                description: 'Budget: $800K-$1.2M, Timeline: 3 months',
+                metadata: 'Location: Vancouver, Features: 3BR, Home Office'
+            });
+            showResult(result, 'New Buyer Registration');
+        };
+
+        window.testPropertyMatch = async () => {
+            const result = await iftttService.triggerEvent('newMatching', {
+                title: 'Property Match: 85% compatibility',
+                description: 'Buyer: Jane Smith, Property: 123 Main St, Vancouver',
+                metadata: 'Price: $950K, Features: 3BR, Modern, Transit'
+            });
+            showResult(result, 'Property Match');
+        };
+
+        window.testMessage = async () => {
+            const result = await iftttService.triggerEvent('messageReceived', {
+                title: 'New Message from Agent',
+                description: 'Agent John contacted buyer about property showing',
+                metadata: 'Subscription: Pro, Priority: High'
+            });
+            showResult(result, 'Message Notification');
+        };
+
+        window.testCommunityUpdate = async () => {
+            const result = await iftttService.triggerEvent('communityInterest', {
+                title: 'Community Interest Update: Coal Harbour',
+                description: '28 active buyers, Avg budget: $920K',
+                metadata: 'Top features: Water view, Concierge, Walking distance'
+            });
+            showResult(result, 'Community Update');
+        };
+
+        window.testPriceAlert = async () => {
+            const result = await iftttService.triggerEvent('priceAlert', {
+                title: 'Price Alert: 456 Oak Street, Vancouver',
+                description: 'Price changed from $900K to $850K',
+                metadata: 'Change: -5.6%, Reason: Price reduction'
+            });
+            showResult(result, 'Price Alert');
+        };
+    </script>
+</body>
+</html>

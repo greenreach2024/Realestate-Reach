@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test App Loading</title>
+</head>
+<body>
+    <div id="test-area">Loading test...</div>
+    
+    <script type="module">
+        console.log('Test script loaded');
+        
+        import { buyers } from './data.js';
+        console.log('Data imported successfully:', buyers?.length);
+        
+        document.getElementById('test-area').innerHTML = `
+            <h2>✅ Module Import Test Successful</h2>
+            <p>Buyers imported: ${buyers?.length || 0}</p>
+            <p>Data.js is working correctly!</p>
+        `;
+    </script>
+</body>
+</html>

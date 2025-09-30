@@ -29,8 +29,12 @@
             <option value="mortgage">Mortgage Agent</option>
           </select>
         </div>
-        <button class="nav-btn" data-target="notifications">Notifications</button>
+        <button class="nav-btn notification-btn" onclick="showNotificationCenter()">
+          🔔 Notifications
+          <span id="notification-badge" class="notification-badge" style="display: none;"></span>
+        </button>
         <button class="nav-btn" data-target="subscription">Subscriptions</button>
+        <button class="nav-btn" onclick="showNotificationSettings()">⚙️ Settings</button>
       </nav>
     </header>
 
@@ -156,11 +160,14 @@
     
     <!-- Fallback test script -->
     <script>
+        console.log('🔧 Fallback script loaded - basic JavaScript working');
+        
         // Simple fallback to test if HTML and basic JS work
         setTimeout(() => {
+            console.log('🕐 Fallback timer fired, checking if app loaded...');
             const loadingIndicator = document.getElementById('loading-indicator');
             if (loadingIndicator && loadingIndicator.parentNode) {
-                console.log('App.js may have failed to load, showing fallback');
+                console.log('⚠️ App.js may have failed to load, showing fallback');
                 document.getElementById('app-root').innerHTML = `
                     <div style="padding: 2rem; border: 2px solid orange; background: #fff3cd;">
                         <h2>⚠️ App Loading Issue</h2>
