@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Buyer Registry Platform Demo</title>
     <link rel="stylesheet" href="styles.css" />
+    <!-- Google Maps API -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap&libraries=geometry"></script>
   </head>
   <body>
     <header class="app-header">
@@ -27,12 +29,21 @@
             <option value="mortgage">Mortgage Agent</option>
           </select>
         </div>
-        <button class="nav-btn" data-target="notifications">Notifications</button>
+        <button class="nav-btn notification-btn" onclick="showNotificationCenter()">
+          🔔 Notifications
+          <span id="notification-badge" class="notification-badge" style="display: none;"></span>
+        </button>
         <button class="nav-btn" data-target="subscription">Subscriptions</button>
+        <button class="nav-btn" onclick="showNotificationSettings()">⚙️ Settings</button>
       </nav>
     </header>
 
-    <main id="app-root" class="app-root"></main>
+    <main id="app-root" class="app-root">
+      <div id="loading-indicator" style="padding: 2rem; text-align: center;">
+        <h2>Loading Buyer Registry...</h2>
+        <p>If this message persists, please check the browser console for errors.</p>
+      </div>
+    </main>
 
     <template id="buyer-wishlist-template">
       <article class="card wishlist-card">
@@ -146,5 +157,32 @@
     </dialog>
 
     <script type="module" src="app.js"></script>
+    
+    <!-- Fallback test script -->
+    <script>
+        console.log('🔧 Fallback script loaded - basic JavaScript working');
+        
+        // Simple fallback to test if HTML and basic JS work
+        setTimeout(() => {
+            console.log('🕐 Fallback timer fired, checking if app loaded...');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            if (loadingIndicator && loadingIndicator.parentNode) {
+                console.log('⚠️ App.js may have failed to load, showing fallback');
+                document.getElementById('app-root').innerHTML = `
+                    <div style="padding: 2rem; border: 2px solid orange; background: #fff3cd;">
+                        <h2>⚠️ App Loading Issue</h2>
+                        <p>The main application failed to load. This could be due to:</p>
+                        <ul>
+                            <li>Module import errors</li>
+                            <li>JavaScript syntax errors</li>
+                            <li>Browser compatibility issues</li>
+                        </ul>
+                        <p>Please check the browser console for error details.</p>
+                        <button onclick="location.reload()">Reload Page</button>
+                    </div>
+                `;
+            }
+        }, 2000);
+    </script>
   </body>
 </html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buyer Registry - Working Version</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <span class="logo">🏡</span>
+            <div>
+                <h1>Buyer Registry</h1>
+                <p class="tagline">Demand-led marketplace experience demo</p>
+            </div>
+        </div>
+        <nav class="header-nav">
+            <button class="nav-btn" onclick="showView('landing')">Overview</button>
+            <button class="nav-btn" onclick="showView('buyer')">Buyer</button>
+            <button class="nav-btn" onclick="showView('seller')">Seller</button>
+            <button class="nav-btn" onclick="showView('agent')">Agent</button>
+        </nav>
+    </header>
+
+    <main id="app-root" class="app-root">
+        <div id="content">
+            <section class="section">
+                <div class="section-header">
+                    <h2>✅ Buyer Registry Platform</h2>
+                    <p class="section-description">The UI is now working! Select a view from the navigation above.</p>
+                </div>
+                
+                <div id="community-map" class="community-map-section">
+                    <h3>🗺️ Community Interest Map</h3>
+                    <div class="map-container">
+                        <div class="map-placeholder">
+                            <div class="map-legend">
+                                <h4>Active Buyer Interest</h4>
+                                <div class="legend-items">
+                                    <div class="legend-item">
+                                        <span class="legend-dot high"></span>
+                                        <span>High Interest (20+ buyers)</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="legend-dot medium"></span>
+                                        <span>Medium Interest (10-19 buyers)</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="legend-dot low"></span>
+                                        <span>Active Interest (5-9 buyers)</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="community-markers">
+                                <div class="community-marker high" style="left: 30%; top: 40%;">
+                                    <div class="marker-dot"></div>
+                                    <div class="marker-popup">
+                                        <h4>Port Moody Centre</h4>
+                                        <p><strong>14</strong> active buyers</p>
+                                        <p>Avg budget: <strong>$1,180,000</strong></p>
+                                    </div>
+                                </div>
+                                <div class="community-marker medium" style="left: 60%; top: 30%;">
+                                    <div class="marker-dot"></div>
+                                    <div class="marker-popup">
+                                        <h4>Coal Harbour</h4>
+                                        <p><strong>22</strong> active buyers</p>
+                                        <p>Avg budget: <strong>$920,000</strong></p>
+                                    </div>
+                                </div>
+                                <div class="community-marker low" style="left: 70%; top: 60%;">
+                                    <div class="marker-dot"></div>
+                                    <div class="marker-popup">
+                                        <h4>Olympic Village</h4>
+                                        <p><strong>18</strong> active buyers</p>
+                                        <p>Avg budget: <strong>$875,000</strong></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="buyer-insights-section">
+                    <h3>📊 Buyer Market Insights</h3>
+                    <div class="insights-grid">
+                        <div class="insight-card">
+                            <div class="insight-header">
+                                <h4>Pre-Qualified Buyers</h4>
+                                <div class="insight-metric">
+                                    <span class="metric-value">67%</span>
+                                    <span class="metric-label">of 97 buyers</span>
+                                </div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 67%"></div>
+                            </div>
+                            <p class="insight-note">65 buyers have mortgage pre-approval</p>
+                        </div>
+
+                        <div class="insight-card">
+                            <div class="insight-header">
+                                <h4>Looking to Purchase</h4>
+                            </div>
+                            <div class="timeline-breakdown">
+                                <div class="timeline-item">
+                                    <div class="timeline-label">
+                                        <span class="timeline-period">Now</span>
+                                        <span class="timeline-count">17 buyers</span>
+                                    </div>
+                                    <div class="timeline-bar">
+                                        <div class="timeline-fill" style="width: 18%"></div>
+                                        <span class="timeline-percentage">18%</span>
+                                    </div>
+                                </div>
+                                <div class="timeline-item">
+                                    <div class="timeline-label">
+                                        <span class="timeline-period">3 months</span>
+                                        <span class="timeline-count">34 buyers</span>
+                                    </div>
+                                    <div class="timeline-bar">
+                                        <div class="timeline-fill" style="width: 35%"></div>
+                                        <span class="timeline-percentage">35%</span>
+                                    </div>
+                                </div>
+                                <div class="timeline-item">
+                                    <div class="timeline-label">
+                                        <span class="timeline-period">6 months</span>
+                                        <span class="timeline-count">27 buyers</span>
+                                    </div>
+                                    <div class="timeline-bar">
+                                        <div class="timeline-fill" style="width: 28%"></div>
+                                        <span class="timeline-percentage">28%</span>
+                                    </div>
+                                </div>
+                                <div class="timeline-item">
+                                    <div class="timeline-label">
+                                        <span class="timeline-period">This year</span>
+                                        <span class="timeline-count">19 buyers</span>
+                                    </div>
+                                    <div class="timeline-bar">
+                                        <div class="timeline-fill" style="width: 19%"></div>
+                                        <span class="timeline-percentage">19%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="insight-card">
+                            <div class="insight-header">
+                                <h4>Most Common Buyer Wants</h4>
+                            </div>
+                            <div class="wants-list">
+                                <div class="want-item">
+                                    <div class="want-rank">1</div>
+                                    <div class="want-details">
+                                        <span class="want-feature">Close to schools</span>
+                                        <div class="want-stats">
+                                            <span class="want-percentage">42%</span>
+                                            <span class="want-count">(41 buyers)</span>
+                                        </div>
+                                    </div>
+                                    <div class="want-bar">
+                                        <div class="want-fill" style="width: 42%"></div>
+                                    </div>
+                                </div>
+                                <div class="want-item">
+                                    <div class="want-rank">2</div>
+                                    <div class="want-details">
+                                        <span class="want-feature">4+ bedrooms</span>
+                                        <div class="want-stats">
+                                            <span class="want-percentage">38%</span>
+                                            <span class="want-count">(37 buyers)</span>
+                                        </div>
+                                    </div>
+                                    <div class="want-bar">
+                                        <div class="want-fill" style="width: 38%"></div>
+                                    </div>
+                                </div>
+                                <div class="want-item">
+                                    <div class="want-rank">3</div>
+                                    <div class="want-details">
+                                        <span class="want-feature">3+ bathrooms</span>
+                                        <div class="want-stats">
+                                            <span class="want-percentage">35%</span>
+                                            <span class="want-count">(34 buyers)</span>
+                                        </div>
+                                    </div>
+                                    <div class="want-bar">
+                                        <div class="want-fill" style="width: 35%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-3" id="feature-cards">
+                    <div class="analytics-card">
+                        <h3>🔍 Matchmaking Engine</h3>
+                        <p>Multi-factor scoring algorithm with location, price, features, and timeline matching.</p>
+                        <button class="primary-button" onclick="showMatchmakingDemo()">Run Demo</button>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>💬 Subscription Messaging</h3>
+                        <p>Free buyers can receive messages. Paid professionals can initiate conversations.</p>
+                        <button class="primary-button" onclick="showMessagingDemo()">View System</button>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>📊 Community Analytics</h3>
+                        <p>Real-time buyer demand insights across Vancouver neighborhoods.</p>
+                        <button class="primary-button" onclick="showAnalytics()">Explore Data</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        console.log('Simple script loaded');
+        
+        function showView(view) {
+            const content = document.getElementById('content');
+            
+            switch(view) {
+                case 'buyer':
+                    content.innerHTML = `
+                        <section class="section">
+                            <h2>👤 Buyer Dashboard</h2>
+                            <p>Free registration • Wishlist management • Match notifications</p>
+                            <div class="messaging-notice">
+                                <div class="notice-card">
+                                    <h3>🔒 Messaging for Buyers</h3>
+                                    <p>You can <strong>receive and respond</strong> to messages from sellers and agents. You cannot initiate conversations.</p>
+                                </div>
+                            </div>
+                            <button class="primary-button" onclick="showView('landing')">Back to Overview</button>
+                        </section>
+                    `;
+                    break;
+                case 'seller':
+                    content.innerHTML = `
+                        <section class="section">
+                            <h2>🏠 Seller Dashboard</h2>
+                            <p>Pro subscription required • Message buyers • View analytics</p>
+                            <div class="card">
+                                <h3>Subscription Required</h3>
+                                <p>Upgrade to Seller Pro ($69/month) to unlock buyer messaging and detailed analytics.</p>
+                            </div>
+                            <button class="primary-button" onclick="showView('landing')">Back to Overview</button>
+                        </section>
+                    `;
+                    break;
+                case 'agent':
+                    content.innerHTML = `
+                        <section class="section">
+                            <h2>🏢 Agent Dashboard</h2>
+                            <p>Pro subscription • Regional analytics • Multi-listing management</p>
+                            <div class="card">
+                                <h3>Agent Pro Features</h3>
+                                <p>$149/month for regional heatmaps, buyer pipeline analytics, and team collaboration.</p>
+                            </div>
+                            <button class="primary-button" onclick="showView('landing')">Back to Overview</button>
+                        </section>
+                    `;
+                    break;
+                default:
+                    location.reload();
+            }
+        }
+        
+        function showMatchmakingDemo() {
+            alert('🔍 Matchmaking Demo\n\nAlgorithm factors:\n• Location (40%)\n• Price (30%)\n• Features (20%)\n• Timeline (10%)\n\nExample: 88% match for Port Moody family home');
+        }
+        
+        function showMessagingDemo() {
+            alert('💬 Messaging System\n\n• Buyers: Free, can receive/respond\n• Sellers: $69/month to message\n• Agents: $149/month for full access\n• Mortgage: $89/month for leads');
+        }
+        
+        function showAnalytics() {
+            alert('📊 Community Analytics\n\n• 97 total active buyers\n• 5 communities tracked\n• $1.02M average budget\n• Real-time demand mapping');
+        }
+        
+        console.log('✅ All functions loaded, UI should be working');
+    </script>
+</body>
+</html>

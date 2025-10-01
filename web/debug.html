@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>🔍 Debug Test Page</h1>
+    <div id="status">Checking JavaScript...</div>
+    
+    <script>
+        console.log('Script starting...');
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded');
+            document.getElementById('status').innerHTML = '✅ JavaScript is working!';
+            
+            // Test ES6 modules
+            import('./data.js')
+                .then(module => {
+                    console.log('Module loaded:', module);
+                    document.getElementById('status').innerHTML += '<br>✅ ES6 modules working!';
+                })
+                .catch(error => {
+                    console.error('Module error:', error);
+                    document.getElementById('status').innerHTML += '<br>❌ ES6 module error: ' + error.message;
+                });
+        });
+        
+        setTimeout(() => {
+            console.log('Timeout check');
+            if (document.getElementById('status').innerHTML === 'Checking JavaScript...') {
+                document.getElementById('status').innerHTML = '❌ JavaScript may not be working';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
