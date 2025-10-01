@@ -466,3 +466,179 @@ body {
     margin-top: 1.5rem;
   }
 }
+
+.wishlist-header {
+  align-items: flex-start;
+}
+
+.wishlist-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-end;
+}
+
+.wishlist-areas {
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: #f9fafb;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.wishlist-areas h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.area-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.area-list.editable li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.area-type {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+}
+
+.notification-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+  color: var(--text-muted);
+}
+
+.map-card {
+  padding-bottom: 1.5rem;
+}
+
+.map {
+  position: relative;
+  height: 280px;
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(30, 64, 175, 0.15));
+  overflow: hidden;
+}
+
+.map::after {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border: 1px dashed rgba(59, 130, 246, 0.25);
+  border-radius: 1rem;
+}
+
+.map-region {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 999px;
+  border: 2px solid rgba(37, 99, 235, 0.4);
+  padding: 0.45rem 0.7rem;
+  font-weight: 700;
+  color: #1d4ed8;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.map-region:hover,
+.map-region:focus {
+  transform: translate(-50%, -50%) scale(1.05);
+  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.25);
+}
+
+.map-tooltip {
+  position: absolute;
+  transform: translate(-50%, -120%);
+  background: #0f172a;
+  color: #fff;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.3);
+}
+
+.locked-card {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px dashed rgba(99, 102, 241, 0.4);
+}
+
+.locked-card button {
+  align-self: start;
+}
+
+.wizard-progress {
+  list-style: none;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0 0 1rem;
+  flex-wrap: wrap;
+}
+
+.wizard-progress li {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: #e5e7eb;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.wizard-progress li.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.wizard-progress li.complete {
+  background: rgba(37, 99, 235, 0.2);
+  color: #1d4ed8;
+}
+
+.wizard-step header {
+  margin-bottom: 1rem;
+}
+
+.wizard-actions {
+  justify-content: space-between;
+}
+
+.payload-preview {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}

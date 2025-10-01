@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Buyer Registry Platform Demo</title>
+    <title>Realestate Ready Demand Demo</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -11,8 +11,8 @@
       <div class="brand">
         <span class="logo">🏡</span>
         <div>
-          <h1>Buyer Registry</h1>
-          <p class="tagline">Demand-led marketplace experience demo</p>
+          <h1>Realestate Ready</h1>
+          <p class="tagline">Buyer-first matchmaking & analytics experience</p>
         </div>
       </div>
       <nav class="header-nav">
@@ -36,72 +36,48 @@
 
     <template id="buyer-wishlist-template">
       <article class="card wishlist-card">
-        <header class="card-header">
-          <h3 class="wishlist-name"></h3>
-          <span class="badge wishlist-status"></span>
+        <header class="card-header wishlist-header">
+          <div>
+            <h3 class="wishlist-name"></h3>
+            <p class="wishlist-summary"></p>
+          </div>
+          <div class="wishlist-badges">
+            <span class="badge preapproval-badge" hidden>Pre-approved</span>
+            <span class="badge wishlist-status"></span>
+          </div>
         </header>
         <div class="card-body">
-          <p class="wishlist-description"></p>
-          <dl class="detail-grid">
-            <div>
-              <dt>Matches</dt>
-              <dd class="wishlist-matches"></dd>
-            </div>
-            <div>
-              <dt>Top Match Score</dt>
-              <dd class="wishlist-score"></dd>
-            </div>
-            <div>
-              <dt>Budget</dt>
-              <dd class="wishlist-budget"></dd>
-            </div>
-            <div>
-              <dt>Timeline</dt>
-              <dd class="wishlist-timeline"></dd>
-            </div>
-          </dl>
-          <div class="pill-group wishlist-features"></div>
+          <dl class="detail-grid wishlist-details"></dl>
+          <div class="wishlist-areas"></div>
+          <div class="pill-group wishlist-must"></div>
+          <div class="pill-group wishlist-nice"></div>
         </div>
         <footer class="card-footer">
-          <button class="ghost-button view-wishlist">View details</button>
+          <button class="ghost-button view-wishlist">View analytics</button>
           <button class="ghost-button edit-wishlist">Edit</button>
           <button class="ghost-button duplicate-wishlist">Duplicate</button>
+          <button class="ghost-button archive-wishlist">Archive</button>
         </footer>
       </article>
     </template>
 
-    <template id="listing-card-template">
-      <article class="card listing-card">
-        <img class="listing-hero" alt="Listing" />
+    <template id="property-card-template">
+      <article class="card property-card">
         <header class="card-header">
-          <h3 class="listing-address"></h3>
-          <span class="badge listing-status"></span>
+          <div>
+            <h3 class="property-name"></h3>
+            <p class="property-location"></p>
+          </div>
+          <span class="badge property-band"></span>
         </header>
         <div class="card-body">
-          <p class="listing-summary"></p>
-          <dl class="detail-grid">
-            <div>
-              <dt>Match Score</dt>
-              <dd class="listing-score"></dd>
-            </div>
-            <div>
-              <dt>Matching Buyers</dt>
-              <dd class="listing-matches"></dd>
-            </div>
-            <div>
-              <dt>Price</dt>
-              <dd class="listing-price"></dd>
-            </div>
-            <div>
-              <dt>Type</dt>
-              <dd class="listing-type"></dd>
-            </div>
-          </dl>
-          <div class="insight-chips"></div>
+          <p class="property-summary"></p>
+          <dl class="detail-grid property-metrics"></dl>
+          <p class="property-snippet"></p>
         </div>
-        <footer class="card-footer">
-          <button class="ghost-button view-insights">View insights</button>
-          <button class="ghost-button contact-buyers">Contact buyers</button>
+        <footer class="card-footer property-actions">
+          <button class="ghost-button view-insights">View buyer overlap</button>
+          <button class="ghost-button contact-buyers">Upgrade to contact buyers</button>
         </footer>
       </article>
     </template>
