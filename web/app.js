@@ -24,6 +24,24 @@ const state = {
   sellerTier: 'free',
 };
 
+// Gating helpers for Seller/Agent
+function canSeeSnippets() {
+  return (state.role === 'seller' || state.role === 'agent') && (state.sellerTier === 'pro');
+}
+function canMessage() {
+  return (state.role === 'seller' || state.role === 'agent') && (state.sellerTier === 'pro');
+}
+
+// Lightweight adapter (mock). Replace with /api/matches/property/:id/summary later.
+function getPropertyMatchSummary(profile) {
+  const base = Math.max(6, (profile?.beds || 3) + (profile?.baths || 2) + (profile?.features?.length || 2));
+  const matches = (profile?.matchedBuyers ?? base + Math.floor(Math.random() * 8));
+  const topScore = profile?.matchScore ?? Math.min(96, 60 + Math.floor(Math.random() * 35));
+  const gaps = profile?.gapHint ? [profile.gapHint] : ['Most buyers want 3 baths; this profile has 2'];
+  const snippet = profile?.topWishlistSnippet || '3‑bed detached under $700K · Near schools';
+  return { matches, topScore, gaps, snippet };
+}
+
 const safeStructuredClone = (value) => {
   if (typeof structuredClone === 'function') {
     return structuredClone(value);
@@ -493,24 +511,32 @@ function renderSellerExperience() {
     description: 'Benchmark your Property Profiles against active buyer demand. Upgrade to contact matched buyers when ready.',
   });
 
-  section.append(
-    renderMapCard({
-      title: 'Buyer demand map',
-      description: 'Hover to view the number of buyers searching each region right now.',
-      regions: sellerHotspots.map((hotspot) => ({ ...hotspot, count: hotspot.buyers })),
-      formatter: (region) => `${region.count} buyers searching here`,
-      emptyCopy: 'Add an approximate property location to reveal demand hotspots.',
-    }),
-  );
+  // Add defensive check for sellerHotspots
+  const hotspots = sellerHotspots || [];
+  const mappedRegions = hotspots.map((hotspot) => ({ ...hotspot, count: hotspot?.buyers || 0 }));
+  
+  const mapCard = renderMapCard({
+    title: 'Buyer demand map',
+    description: 'Hover to view the number of buyers searching each region right now.',
+    regions: mappedRegions,
+    formatter: (region) => `${region?.count || 0} buyers searching here`,
+    emptyCopy: 'Add an approximate property location to reveal demand hotspots.',
+  });
+  
+  section.append(mapCard);
 
   const grid = document.createElement('div');
   grid.className = 'grid grid-2';
 
-  if (!propertyProfiles.length) {
+  // Add defensive check for propertyProfiles
+  const profiles = propertyProfiles || [];
+  if (!profiles.length) {
     grid.append(createEmptyState('We found 18 buyers in your area; top match 78%. Upgrade to view trends & contact.'));
   } else {
-    propertyProfiles.forEach((profile) => {
-      grid.append(renderPropertyCard(profile));
+    profiles.forEach((profile) => {
+      if (profile) {
+        grid.append(renderPropertyCard(profile));
+      }
     });
   }
 
@@ -519,46 +545,108 @@ function renderSellerExperience() {
 }
 
 function renderPropertyCard(profile) {
-  const template = document.getElementById('property-card-template');
-  const node = template.content.firstElementChild.cloneNode(true);
+  // Try template first
+  const tpl = document.getElementById('property-card-template');
+  const summary = getPropertyMatchSummary(profile);
+  const pct = Math.round(summary.topScore || 0);
 
-  node.querySelector('.property-name').textContent = profile.nickname;
-  node.querySelector('.property-location').textContent = profile.location;
-  node.querySelector('.property-band').textContent = profile.matchBand;
-  node.querySelector('.property-summary').textContent = profile.summary;
+  const applyIntoNode = (node) => {
+    // Title line
+    const nameEl = node.querySelector('.property-name') || node.querySelector('.prop-card__type');
+    const locEl = node.querySelector('.property-location');
+    const bandEl = node.querySelector('.property-band') || node.querySelector('.js-score');
+    const buyersEl = node.querySelector('.property-buyers') || node.querySelector('.js-buyers');
 
-  const metrics = node.querySelector('.property-metrics');
-  metrics.innerHTML = `
-    <div>
-      <dt>Match score</dt>
-      <dd>${profile.matchScore}%</dd>
-    </div>
-    <div>
-      <dt>Matching buyers</dt>
-      <dd>${profile.matchedBuyers}</dd>
-    </div>
-    <div>
-      <dt>Gap hint</dt>
-      <dd>${profile.gapHint}</dd>
-    </div>
-  `;
+    if (nameEl) nameEl.textContent = profile?.nickname || `${profile?.type || 'Home'} • ${profile?.beds ?? '—'} bd / ${profile?.baths ?? '—'} ba`;
+    if (locEl) locEl.textContent = profile?.location || 'Approx. area set';
+    if (bandEl) bandEl.textContent = pct ? `${pct}%` : '—';
+    if (buyersEl) buyersEl.textContent = (summary.matches ?? 0).toString();
 
-  node.querySelector('.property-snippet').textContent = `Top wishlist: ${profile.topWishlistSnippet}`;
+    // Optional meta
+    const meta = node.querySelector('.property-summary') || node.querySelector('.prop-card__snippet');
+    if (meta) meta.textContent = canSeeSnippets() ? summary.snippet : 'We found matching buyers. Upgrade to view anonymized wishlist snippets.';
 
-  node.querySelector('.view-insights').addEventListener('click', () => openPropertyInsights(profile));
-  const contactButton = node.querySelector('.contact-buyers');
-  if (state.sellerTier !== 'pro' || profile.access === 'upgrade') {
-    contactButton.addEventListener('click', () => openUpgradePrompt());
-    contactButton.title = 'Upgrade to Seller · Pro to start messaging matched buyers.';
-  } else {
-    contactButton.textContent = 'Contact matched buyers';
-    contactButton.addEventListener('click', () => openChat(`property-${profile.id}`, 'Matched buyers'));
+    const gapsUl = node.querySelector('.property-gaps') || node.querySelector('.prop-card__gaps');
+    if (gapsUl) {
+      gapsUl.innerHTML = '';
+      (summary.gaps || []).forEach(g => {
+        const li = document.createElement('li'); li.textContent = g; gapsUl.appendChild(li);
+      });
+      gapsUl.hidden = !canSeeSnippets() ? false : (summary.gaps?.length ?? 0) === 0;
+    }
+
+    // Actions and gating
+    const insightsBtn = node.querySelector('.view-insights') || node.querySelector('.js-insights');
+    const messageBtn = node.querySelector('.contact-buyers') || node.querySelector('.js-message');
+    const upgradeBtn = node.querySelector('.js-upgrade');
+
+    insightsBtn?.addEventListener('click', () => openPropertyInsights(profile));
+
+    if (messageBtn) {
+      if (!canMessage()) {
+        messageBtn.disabled = true;
+        messageBtn.title = 'Upgrade to contact buyers';
+        messageBtn.addEventListener('click', () => openUpgradePrompt());
+        if (upgradeBtn) upgradeBtn.hidden = false;
+      } else {
+        messageBtn.disabled = false;
+        messageBtn.textContent = 'Message matched buyers';
+        messageBtn.addEventListener('click', () => openChat(`property-${profile?.id || 'unknown'}`, 'Matched buyers'));
+      }
+    }
+    return node;
+  };
+
+  if (tpl?.content?.firstElementChild) {
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    return applyIntoNode(node);
   }
 
-  return node;
+  // Fallback: build card programmatically (works even if template missing)
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <h3 class="property-name">${profile?.nickname || (profile?.type || 'Home')}</h3>
+        <p class="section-description property-location">${profile?.location || 'Approx. area set'}</p>
+      </div>
+      <span class="badge property-band">${pct ? pct + '%' : '—'}</span>
+    </div>
+    <div class="card-body">
+      <p class="property-summary">${canSeeSnippets() ? summary.snippet : 'We found matching buyers. Upgrade to view anonymized wishlist snippets.'}</p>
+      <dl class="property-metrics">
+        <div><dt>Matching buyers</dt><dd class="property-buyers">${summary.matches}</dd></div>
+        <div><dt>Match score</dt><dd>${pct}%</dd></div>
+      </dl>
+      <ul class="property-gaps"></ul>
+    </div>
+    <footer class="card-footer">
+      <button class="ghost-button view-insights">View insights</button>
+      <button class="primary-button contact-buyers">${canMessage() ? 'Message matched buyers' : 'Upgrade to contact buyers'}</button>
+    </footer>
+  `;
+  const gapsUl = card.querySelector('.property-gaps');
+  (summary.gaps || []).forEach(g => { const li = document.createElement('li'); li.textContent = g; gapsUl.appendChild(li); });
+
+  const msgBtn = card.querySelector('.contact-buyers');
+  if (!canMessage()) {
+    msgBtn.addEventListener('click', () => openUpgradePrompt());
+    msgBtn.disabled = false; // keep clickable to show upgrade
+    msgBtn.title = 'Upgrade to contact buyers';
+  } else {
+    msgBtn.addEventListener('click', () => openChat(`property-${profile?.id || 'unknown'}`, 'Matched buyers'));
+  }
+  card.querySelector('.view-insights').addEventListener('click', () => openPropertyInsights(profile));
+  return card;
 }
 
 function renderSellerAnalytics() {
+  if (!sellerAnalytics) {
+    console.error('sellerAnalytics data not available');
+    return document.createElement('div');
+  }
+
   const analytics = document.createElement('section');
   analytics.className = 'section';
   analytics.innerHTML = `
@@ -575,31 +663,34 @@ function renderSellerAnalytics() {
   budgetCard.className = 'analytics-card';
   budgetCard.innerHTML = `
     <h3>Budget distribution</h3>
-    ${sellerAnalytics.budgetDistribution.map((item) => renderMetric(item.label, item.value)).join('')}
+    ${(sellerAnalytics.budgetDistribution || []).map((item) => renderMetric(item?.label || 'Unknown', item?.value || 0)).join('')}
   `;
 
   const featureCard = document.createElement('article');
   featureCard.className = 'analytics-card';
   featureCard.innerHTML = `
     <h3>Top requested features</h3>
-    <ul>${sellerAnalytics.featureDemand.map((feature) => `<li>${feature}</li>`).join('')}</ul>
+    <ul>${(sellerAnalytics.featureDemand || []).map((feature) => `<li>${feature || 'Unknown feature'}</li>`).join('')}</ul>
   `;
 
   const timelineCard = document.createElement('article');
   timelineCard.className = 'analytics-card';
   timelineCard.innerHTML = `
     <h3>Timeline urgency</h3>
-    ${sellerAnalytics.timelineDemand.map((item) => renderMetric(item.label, item.value)).join('')}
+    ${(sellerAnalytics.timelineDemand || []).map((item) => renderMetric(item?.label || 'Unknown', item?.value || 0)).join('')}
   `;
 
   const trendsCard = document.createElement('article');
   trendsCard.className = 'analytics-card locked-card';
   trendsCard.innerHTML = `
     <h3>Trends & compare (Seller · Pro)</h3>
-    <p>${sellerAnalytics.paidInsights.trendsLockedCopy}</p>
+    <p>${sellerAnalytics.paidInsights?.trendsLockedCopy || 'Upgrade to unlock trends and comparison features.'}</p>
     <button class="ghost-button" type="button">Upgrade to unlock trends</button>
   `;
-  trendsCard.querySelector('button').addEventListener('click', () => openUpgradePrompt());
+  const upgradeButton = trendsCard.querySelector('button');
+  if (upgradeButton) {
+    upgradeButton.addEventListener('click', () => openUpgradePrompt());
+  }
 
   grid.append(budgetCard, featureCard, timelineCard, trendsCard);
   analytics.append(grid);
@@ -1217,47 +1308,120 @@ function renderMapCard({ title, description, regions, formatter, emptyCopy }) {
     </div>
   `;
 
-  const map = document.createElement('div');
-  map.className = 'map';
-  const tooltip = document.createElement('div');
-  tooltip.className = 'map-tooltip';
-  tooltip.hidden = true;
-  map.append(tooltip);
+  // Create a container for the real map
+  const mapContainer = document.createElement('div');
+  mapContainer.id = `map-${Date.now()}`; // Unique ID for each map
+  mapContainer.style.cssText = `
+    height: 280px !important;
+    border-radius: 1.25rem !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(59, 130, 246, 0.25) !important;
+    z-index: 1 !important;
+  `;
 
-  if (!regions.length) {
-    map.append(createEmptyState(emptyCopy));
-  } else {
-    regions.forEach((region) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'map-region';
-      button.style.setProperty('--x', `${region.x}%`);
-      button.style.setProperty('--y', `${region.y}%`);
-      button.textContent = region.count;
-      button.addEventListener('mouseenter', (event) => showTooltip(event.currentTarget, formatter(region)));
-      button.addEventListener('focus', (event) => showTooltip(event.currentTarget, formatter(region)));
-      button.addEventListener('mouseleave', hideTooltip);
-      button.addEventListener('blur', hideTooltip);
-      map.append(button);
-    });
-  }
+  card.append(mapContainer);
 
-  card.append(map);
+  // Initialize the map after the container is added to DOM
+  setTimeout(() => {
+    if (typeof L !== 'undefined' && regions.length > 0) {
+      // Calculate center point from all regions
+      const centerLat = regions.reduce((sum, r) => sum + r.lat, 0) / regions.length;
+      const centerLng = regions.reduce((sum, r) => sum + r.lng, 0) / regions.length;
 
-  function showTooltip(target, text) {
-    const mapRect = map.getBoundingClientRect();
-    const rect = target.getBoundingClientRect();
-    tooltip.hidden = false;
-    tooltip.textContent = text;
-    const offsetX = rect.left - mapRect.left + rect.width / 2;
-    const offsetY = rect.top - mapRect.top;
-    tooltip.style.left = `${offsetX}px`;
-    tooltip.style.top = `${offsetY}px`;
-  }
+      // Initialize Leaflet map
+      const map = L.map(mapContainer.id, {
+        zoomControl: true,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        dragging: true,
+        touchZoom: true,
+        boxZoom: false,
+      }).setView([centerLat, centerLng], 11);
 
-  function hideTooltip() {
-    tooltip.hidden = true;
-  }
+      // Add OpenStreetMap tiles (free, no API key required)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 18,
+      }).addTo(map);
+
+      // Add markers for each region
+      regions.forEach((region) => {
+        // Create custom marker with buyer count
+        const markerHtml = `
+          <div style="
+            background: #fff;
+            border: 3px solid #1d4ed8;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #1d4ed8;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.3);
+            font-size: 13px;
+          ">${region.count}</div>
+        `;
+
+        const customIcon = L.divIcon({
+          html: markerHtml,
+          className: 'custom-marker',
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+        });
+
+        const marker = L.marker([region.lat, region.lng], { icon: customIcon })
+          .addTo(map)
+          .bindPopup(`
+            <div style="text-align: center; padding: 5px;">
+              <strong>${region.label}</strong><br>
+              <span style="color: #1d4ed8; font-weight: bold;">${region.count} buyers searching</span>
+            </div>
+          `);
+
+        // Add hover effects
+        marker.on('mouseover', function () {
+          this.openPopup();
+        });
+        
+        marker.on('mouseout', function () {
+          this.closePopup();
+        });
+      });
+
+      // Fit map to show all markers
+      if (regions.length > 1) {
+        const group = L.featureGroup(
+          regions.map(r => L.marker([r.lat, r.lng]))
+        );
+        map.fitBounds(group.getBounds().pad(0.1));
+      }
+
+    } else if (regions.length === 0) {
+      // Show empty state if no regions
+      mapContainer.style.cssText += `
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(37, 99, 235, 0.1);
+        color: #64748b;
+        font-style: italic;
+      `;
+      mapContainer.textContent = emptyCopy;
+    } else {
+      // Fallback if Leaflet not loaded
+      mapContainer.style.cssText += `
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(239, 68, 68, 0.1);
+        color: #dc2626;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      `;
+      mapContainer.textContent = 'Map library not loaded. Please refresh the page.';
+    }
+  }, 100);
 
   return card;
 }
@@ -1309,3 +1473,48 @@ function simulateMatchSummary(data) {
 }
 
 renderApp();
+
+function openUpgradePrompt() {
+  alert('To message matched buyers and see detailed snippets, upgrade to Seller · Pro for personalized insights and anonymous communication.');
+}
+
+function openPropertyInsights(profile) {
+  const summary = getPropertyMatchSummary(profile);
+  
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>${profile?.nickname || 'Property'} Insights</h2>
+        <button class="close-modal">&times;</button>
+      </header>
+      <div class="modal-body">
+        <p><strong>Match Score:</strong> ${Math.round(summary.topScore || 0)}%</p>
+        <p><strong>Matching Buyers:</strong> ${summary.matches || 0}</p>
+        <p><strong>Summary:</strong> ${canSeeSnippets() ? summary.snippet : 'Upgrade to see detailed buyer wishlist summaries.'}</p>
+        ${summary.gaps?.length ? `<p><strong>Gaps:</strong> ${summary.gaps.join(', ')}</p>` : ''}
+      </div>
+      <footer class="modal-footer">
+        <button class="primary-button close-modal">Close</button>
+      </footer>
+    </div>
+  `;
+  
+  modal.querySelectorAll('.close-modal').forEach(btn => {
+    btn.addEventListener('click', () => document.body.removeChild(modal));
+  });
+  
+  document.body.appendChild(modal);
+}
+
+function updatePropertyCards() {
+  const container = document.getElementById('property-grid') || document.querySelector('.property-grid');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  profilesData.forEach(profile => {
+    const card = renderPropertyCard(profile);
+    container.appendChild(card);
+  });
+}

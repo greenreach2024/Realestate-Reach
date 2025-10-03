@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Realestate Ready Demand Demo</title>
     <link rel="stylesheet" href="styles.css" />
-    <!-- Google Maps API -->
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap&libraries=geometry"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin=""/>
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin=""></script>
   </head>
   <body>
     <header class="app-header">
@@ -77,18 +83,22 @@
         <header class="card-header">
           <div>
             <h3 class="property-name"></h3>
-            <p class="property-location"></p>
+            <p class="section-description property-location"></p>
           </div>
           <span class="badge property-band"></span>
         </header>
         <div class="card-body">
           <p class="property-summary"></p>
-          <dl class="detail-grid property-metrics"></dl>
-          <p class="property-snippet"></p>
+          <dl class="property-metrics detail-grid">
+            <div><dt>Matching buyers</dt><dd class="property-buyers">0</dd></div>
+            <div><dt>Match score</dt><dd class="js-score">—</dd></div>
+          </dl>
+          <ul class="property-gaps" hidden></ul>
         </div>
         <footer class="card-footer property-actions">
-          <button class="ghost-button view-insights">View buyer overlap</button>
-          <button class="ghost-button contact-buyers">Upgrade to contact buyers</button>
+          <button class="ghost-button view-insights js-insights">View insights</button>
+          <button class="primary-button contact-buyers js-message">Contact buyers</button>
+          <button class="ghost-button js-upgrade" hidden>Upgrade</button>
         </footer>
       </article>
     </template>

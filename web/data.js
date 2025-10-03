@@ -116,10 +116,42 @@ export const propertyProfiles = [
 ];
 
 export const sellerHotspots = [
-  { id: 'hotspot-1', label: 'Port Moody Centre', buyers: 18, x: 34, y: 52 },
-  { id: 'hotspot-2', label: 'Burke Mountain', buyers: 9, x: 22, y: 30 },
-  { id: 'hotspot-3', label: 'False Creek', buyers: 14, x: 64, y: 42 },
-  { id: 'hotspot-4', label: 'Coal Harbour', buyers: 11, x: 76, y: 18 },
+  { 
+    id: 'hotspot-1', 
+    label: 'Port Moody Centre', 
+    buyers: 18, 
+    lat: 49.2838, 
+    lng: -122.8311,
+    x: 34, 
+    y: 52 
+  },
+  { 
+    id: 'hotspot-2', 
+    label: 'Burke Mountain', 
+    buyers: 9, 
+    lat: 49.3321, 
+    lng: -122.9658,
+    x: 22, 
+    y: 30 
+  },
+  { 
+    id: 'hotspot-3', 
+    label: 'False Creek', 
+    buyers: 14, 
+    lat: 49.2687, 
+    lng: -123.1207,
+    x: 64, 
+    y: 42 
+  },
+  { 
+    id: 'hotspot-4', 
+    label: 'Coal Harbour', 
+    buyers: 11, 
+    lat: 49.2945, 
+    lng: -123.1307,
+    x: 76, 
+    y: 18 
+  },
 ];
 
 export const sellerAnalytics = {
