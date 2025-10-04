@@ -26,6 +26,7 @@
       <nav class="header-nav">
         <button class="nav-btn" data-target="landing">Overview</button>
         <button class="nav-btn" data-target="auth">Onboarding</button>
+        <button class="nav-btn" data-target="messages">Messages</button>
         <div class="role-switcher">
           <label for="role-select">Role Experience</label>
           <select id="role-select">
@@ -41,6 +42,7 @@
         </button>
         <button class="nav-btn" data-target="subscription">Subscriptions</button>
         <button class="nav-btn" onclick="showNotificationSettings()">⚙️ Settings</button>
+        <div id="auth-actions" class="auth-actions"></div>
       </nav>
     </header>
 
@@ -142,7 +144,8 @@
       </form>
     </dialog>
 
-    <script type="module" src="app.js"></script>
+  <script type="module" src="auth.js"></script>
+  <script type="module" src="app.js"></script>
     
     <!-- Fallback test script -->
     <script>

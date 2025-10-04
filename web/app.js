@@ -10,6 +10,7 @@ import {
   subscriptions,
   onboardingFlows,
 } from './data.js';
+import { auth, renderAuthActions, renderLoginPage, renderRegistrationPage } from './auth.js';
 
 const appRoot = document.getElementById('app-root');
 const roleSelect = document.getElementById('role-select');
@@ -59,8 +60,10 @@ const generateId = (prefix) => {
 const navButtons = document.querySelectorAll('.nav-btn');
 navButtons.forEach((button) => {
   button.addEventListener('click', () => {
-    state.view = button.dataset.target;
-    renderApp();
+    if (button.dataset && button.dataset.target) {
+      state.view = button.dataset.target;
+      renderApp();
+    }
   });
 });
 
@@ -74,6 +77,32 @@ modal.addEventListener('close', () => {
   modalContent.innerHTML = '';
 });
 
+// Expose handlers used by inline onclick in index.html
+// These must be on window because app.js is an ES module
+window.showNotificationCenter = () => {
+  state.view = 'notifications';
+  renderApp();
+};
+
+window.showNotificationSettings = () => {
+  modalTitle.textContent = 'Notification settings';
+  modalContent.innerHTML = `
+    <form class="form-grid">
+      <label class="checkbox-label"><input type="checkbox" checked /> Email alerts</label>
+      <label class="checkbox-label"><input type="checkbox" checked /> In-app notifications</label>
+      <label class="checkbox-label"><input type="checkbox" /> SMS (high-priority only)</label>
+      <div class="form-actions">
+        <button class="primary-button" type="submit">Save</button>
+      </div>
+    </form>
+  `;
+  modalContent.querySelector('form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    modal.close();
+  });
+  modal.showModal();
+};
+
 function renderApp() {
   appRoot.innerHTML = '';
 
@@ -81,8 +110,17 @@ function renderApp() {
     case 'landing':
       appRoot.append(renderLanding());
       break;
+    case 'login':
+      appRoot.append(renderLoginPage());
+      break;
+    case 'register':
+      appRoot.append(renderRegistrationPage());
+      break;
     case 'auth':
       appRoot.append(renderOnboarding());
+      break;
+    case 'messages':
+      appRoot.append(renderMessenger());
       break;
     case 'notifications':
       appRoot.append(renderNotifications());
@@ -96,11 +134,133 @@ function renderApp() {
   }
 }
 
+// Expose simple navigation for other modules (e.g., auth.js) and inline buttons
+window.gotoView = (view) => {
+  state.view = view;
+  renderApp();
+};
+
+// Allow auth to complete and align SPA role state
+window.authComplete = (role) => {
+  try {
+    const sel = document.getElementById('role-select');
+    if (sel) sel.value = role;
+  } catch {}
+  state.role = role;
+  state.view = 'role';
+  renderAuthActions();
+  renderApp();
+};
+
+function renderMessenger() {
+  const section = createSection({
+    title: 'In-app messages',
+    description: 'Anonymized conversations aligned to buyer wishlists and property profiles. The system publishes demand, not supply.',
+  });
+
+  const s = auth.state;
+  if (!s) {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.innerHTML = `
+      <h3>Sign in to view messages</h3>
+      <p>Messaging is in-app and anonymized. No emails or phone numbers are disclosed unless both parties consent.</p>
+      <div class="form-actions">
+        <button class="primary-button" type="button" id="msg-login">Sign in</button>
+        <button class="ghost-button" type="button" id="msg-register">Register</button>
+      </div>
+    `;
+    card.querySelector('#msg-login')?.addEventListener('click', () => window.openAuthModal('login'));
+    card.querySelector('#msg-register')?.addEventListener('click', () => window.openAuthModal('register'));
+    section.append(card);
+    return section;
+  }
+
+  const threads = getThreadsForRole(s.role);
+  if (!threads.length) {
+    section.append(createEmptyState('No conversations yet. When demand aligns, threads will appear here.'));
+    return section;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'notification-list';
+  threads.forEach((t) => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3>${t.subject}</h3>
+            <p class="section-description">Thread is anonymized • Linked: ${t.linkedAlias}</p>
+          </div>
+          <span class="badge">${t.status}</span>
+        </div>
+        <div class="card-body">
+          <p>${t.snippet}</p>
+        </div>
+        <footer class="card-footer">
+          <button class="ghost-button" data-id="${t.id}" data-action="open">Open chat</button>
+          <button class="ghost-button" data-id="${t.id}" data-action="mute">${t.status === 'Muted' ? 'Unmute' : 'Mute'}</button>
+          <button class="ghost-button" data-id="${t.id}" data-action="disclose">Request disclosure</button>
+        </footer>
+      </div>
+    `;
+    list.append(li);
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-id]');
+    if (!btn) return;
+    const id = btn.getAttribute('data-id');
+    const action = btn.getAttribute('data-action');
+    const t = threads.find((x) => x.id === id);
+    if (!t) return;
+    if (action === 'open') openChat(t.id, t.counterparty);
+    if (action === 'mute') {
+      t.status = t.status === 'Muted' ? 'Reply ready' : 'Muted';
+      renderApp();
+    }
+    if (action === 'disclose') openDisclosurePrompt({ counterparty: t.counterparty });
+  });
+
+  section.append(list);
+  return section;
+}
+
+function getThreadsForRole(role) {
+  // Map data.js structures to generic thread list for demo purposes
+  if (role === 'buyer') {
+    const b = buyers[0];
+    return (b.messages || []).map((m) => ({
+      id: m.id,
+      subject: m.counterparty,
+      linkedAlias: b.wishlists.find((w) => w.id === m.wishlistId)?.name || 'Wishlist',
+      status: m.status,
+      snippet: m.preview,
+      counterparty: m.counterparty,
+    }));
+  }
+  if (role === 'mortgage') {
+    return (mortarize(mortgageLeads) || []).map((lead) => ({
+      id: lead.threadId,
+      subject: `Lead: ${lead.buyerAlias}`,
+      linkedAlias: lead.buyerAlias,
+      status: lead.status,
+      snippet: `Budget ${formatCurrency(lead.budget.min)} - ${formatCurrency(lead.budget.max)} · ${lead.timeline}`,
+      counterparty: lead.buyerAlias,
+    }));
+  }
+  // Sellers and agents in free mode: no threads until upgrade/demo
+  return [];
+}
+
+function mortarize(x) { return Array.isArray(x) ? x : []; }
+
 function renderLanding() {
   const section = createSection({
     title: 'Demand-led matchmaking for Realestate Ready',
     description:
-      'Explore how Realestate Ready mirrors the polish of MLS.ca while flipping the model: Buyer Wishlists are public, Property Profiles stay private, and analytics drive every interaction.',
+      'Realestate Ready is not an MLS or property listing site. Buyers publish wishlists; sellers and agents compare private property profiles against demand. The platform publishes demand, not supply.',
   });
 
   const hero = document.createElement('div');
@@ -127,15 +287,15 @@ function renderLanding() {
   const cards = [
     {
       title: 'Buyer-first visibility',
-      body: 'Public Buyer Wishlists showcase demand bands, geo priorities, and pre-approval badges without exposing PII.',
+      body: 'Public Buyer Wishlists (anonymized) showcase demand bands, geo priorities, and pre-approval badges—never personal information.',
     },
     {
       title: 'Private supply intelligence',
-      body: 'Sellers and agents benchmark Property Profiles, review match gaps, and upgrade to contact high-fit buyers.',
+      body: 'Sellers and agents benchmark Property Profiles for AI-driven comparisons—no homes are listed for sale.',
     },
     {
       title: 'Compliance by design',
-      body: 'In-app messaging, disclosure logging, and privacy-safe maps keep every interaction auditable.',
+      body: 'In-app, anonymized messaging with disclosure controls and privacy-safe maps. The system publishes demand, not supply.',
     },
   ];
 
@@ -507,42 +667,135 @@ function renderBuyerNotifications(buyer) {
 
 function renderSellerExperience() {
   const section = createSection({
-    title: 'Seller dashboard · My Property Profiles',
-    description: 'Benchmark your Property Profiles against active buyer demand. Upgrade to contact matched buyers when ready.',
+    title: 'Seller dashboard · My Home Profile',
+    description: 'You can maintain one private Home Profile. See nearby buyer demand within 10km and how closely buyers align to your home based on the details you provide. The platform publishes demand, not supply.',
   });
 
-  // Add defensive check for sellerHotspots
+  // Determine the seller's single home profile (first entry in propertyProfiles)
+  const home = (propertyProfiles || [])[0];
+
+  // Demand heatmap (larger catchment overview)
   const hotspots = sellerHotspots || [];
   const mappedRegions = hotspots.map((hotspot) => ({ ...hotspot, count: hotspot?.buyers || 0 }));
-  
   const mapCard = renderMapCard({
-    title: 'Buyer demand map',
-    description: 'Hover to view the number of buyers searching each region right now.',
+    title: 'Regional buyer demand',
+    description: 'Hover to view the number of buyers searching each region right now. This is an aggregate, privacy-safe view.',
     regions: mappedRegions,
     formatter: (region) => `${region?.count || 0} buyers searching here`,
-    emptyCopy: 'Add an approximate property location to reveal demand hotspots.',
+    emptyCopy: 'Set your approximate location to reveal demand hotspots and nearby buyer counts.',
   });
-  
   section.append(mapCard);
 
-  const grid = document.createElement('div');
-  grid.className = 'grid grid-2';
-
-  // Add defensive check for propertyProfiles
-  const profiles = propertyProfiles || [];
-  if (!profiles.length) {
-    grid.append(createEmptyState('We found 18 buyers in your area; top match 78%. Upgrade to view trends & contact.'));
+  // My Home Profile summary (no multi-property listing)
+  const profileCard = document.createElement('article');
+  profileCard.className = 'card';
+  if (!home) {
+    profileCard.innerHTML = `
+      <div class="card-header">
+        <div>
+          <h3>My Home Profile</h3>
+          <p class="section-description">Add your home details to see buyer alignment in your area.</p>
+        </div>
+      </div>
+      <div class="card-body">
+        ${createEmptyState('No home profile yet — add approximate location, bed/bath, and features to unlock analytics.').outerHTML}
+      </div>
+      <footer class="card-footer">
+        <button class="primary-button" id="add-home-btn">Create Home Profile</button>
+      </footer>
+    `;
   } else {
-    profiles.forEach((profile) => {
-      if (profile) {
-        grid.append(renderPropertyCard(profile));
+    const summary = getPropertyMatchSummary(home);
+    profileCard.innerHTML = `
+      <div class="card-header">
+        <div>
+          <h3>${home.nickname || 'My Home Profile'}</h3>
+          <p class="section-description">${home.location || 'Approximate location set'}</p>
+        </div>
+        <span class="badge">${Math.round(summary.topScore || 0)}%</span>
+      </div>
+      <div class="card-body">
+        <p>${home.summary || ''}</p>
+        <dl class="detail-grid">
+          <div><dt>Matching buyers</dt><dd>${summary.matches}</dd></div>
+          <div><dt>Top alignment</dt><dd>${Math.round(summary.topScore || 0)}%</dd></div>
+        </dl>
+        <p class="section-description">We found matching buyers based on your submitted details. Upgrade to view anonymized wishlist snippets.</p>
+      </div>
+      <footer class="card-footer">
+        <button class="ghost-button" id="view-home-insights">View insights</button>
+        <button class="primary-button" id="home-message-btn">${canMessage() ? 'Message matched buyers' : 'Upgrade to contact buyers'}</button>
+      </footer>
+    `;
+    profileCard.querySelector('#view-home-insights')?.addEventListener('click', () => openPropertyInsights(home));
+    const msgBtn = profileCard.querySelector('#home-message-btn');
+    if (msgBtn) {
+      if (!canMessage()) {
+        msgBtn.addEventListener('click', () => openUpgradePrompt());
+      } else {
+        msgBtn.addEventListener('click', () => openChat(`property-${home.id}`, 'Matched buyers'));
       }
-    });
+    }
   }
+  section.append(profileCard);
 
-  section.append(grid, renderSellerAnalytics(), renderSellerMessagingGate());
+  // 10km radius buyer stats centred on the seller's home
+  const nearbyCard = document.createElement('article');
+  nearbyCard.className = 'card';
+  const counts = compute10kmBuyerStats(home, hotspots);
+  nearbyCard.innerHTML = `
+    <div class="card-header">
+      <div>
+        <h3>Buyers within 10km</h3>
+        <p class="section-description">Counts and alignment based on your home details (privacy-safe aggregation).</p>
+      </div>
+      <span class="badge">${counts.total} buyers</span>
+    </div>
+    <div class="card-body">
+      <ul class="detail-list">
+        <li><strong>Strong alignment (≥80%)</strong>: ${counts.strong}</li>
+        <li><strong>Moderate (60–79%)</strong>: ${counts.moderate}</li>
+        <li><strong>Explorers (<60%)</strong>: ${counts.low}</li>
+      </ul>
+    </div>
+  `;
+  section.append(nearbyCard, renderSellerAnalytics(), renderSellerMessagingGate());
   return section;
 }
+
+function compute10kmBuyerStats(home, regions) {
+  // Fallbacks if we don’t have exact coordinates
+  const result = { total: 0, strong: 0, moderate: 0, low: 0 };
+  const validRegions = Array.isArray(regions) ? regions.filter(r => isFinite(r.lat) && isFinite(r.lng)) : [];
+  if (!home || !isFinite(home?.lat) || !isFinite(home?.lng) || !validRegions.length) {
+    // Derive some totals from available hotspot counts as a soft fallback
+    const approxTotal = validRegions.reduce((sum, r) => sum + (r.buyers || 0), 0);
+    result.total = approxTotal;
+    result.strong = Math.round(approxTotal * 0.35);
+    result.moderate = Math.round(approxTotal * 0.45);
+    result.low = Math.max(0, approxTotal - result.strong - result.moderate);
+    return result;
+  }
+  const within = validRegions.filter(r => haversineKm(home.lat, home.lng, r.lat, r.lng) <= 10);
+  const total = within.reduce((sum, r) => sum + (r.buyers || 0), 0);
+  // Split by simple heuristic based on home match summary
+  const top = Math.min(0.6, Math.max(0.25, (getPropertyMatchSummary(home).topScore || 70) / 100 - 0.2));
+  result.total = total;
+  result.strong = Math.round(total * top);
+  result.moderate = Math.round(total * (0.55 - (top - 0.25)));
+  result.low = Math.max(0, total - result.strong - result.moderate);
+  return result;
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+function toRad(v) { return (v * Math.PI) / 180; }
 
 function renderPropertyCard(profile) {
   // Try template first
@@ -662,21 +915,21 @@ function renderSellerAnalytics() {
   const budgetCard = document.createElement('article');
   budgetCard.className = 'analytics-card';
   budgetCard.innerHTML = `
-    <h3>Budget distribution</h3>
+    <h3>Buyer budget distribution</h3>
     ${(sellerAnalytics.budgetDistribution || []).map((item) => renderMetric(item?.label || 'Unknown', item?.value || 0)).join('')}
   `;
 
   const featureCard = document.createElement('article');
   featureCard.className = 'analytics-card';
   featureCard.innerHTML = `
-    <h3>Top requested features</h3>
+    <h3>Top requested buyer features</h3>
     <ul>${(sellerAnalytics.featureDemand || []).map((feature) => `<li>${feature || 'Unknown feature'}</li>`).join('')}</ul>
   `;
 
   const timelineCard = document.createElement('article');
   timelineCard.className = 'analytics-card';
   timelineCard.innerHTML = `
-    <h3>Timeline urgency</h3>
+    <h3>Buyer timeline urgency</h3>
     ${(sellerAnalytics.timelineDemand || []).map((item) => renderMetric(item?.label || 'Unknown', item?.value || 0)).join('')}
   `;
 
@@ -719,7 +972,7 @@ function renderSellerMessagingGate() {
 function renderAgentExperience() {
   const section = createSection({
     title: 'Agent Pro analytics',
-    description: 'Discover buyer heatmaps, demand funnels, and multi-property match strategies.',
+    description: 'Analyze buyer wishlists and compare private seller property profiles. No property advertising occurs here.',
   });
 
   const overview = document.createElement('div');
@@ -1323,10 +1576,15 @@ function renderMapCard({ title, description, regions, formatter, emptyCopy }) {
 
   // Initialize the map after the container is added to DOM
   setTimeout(() => {
-    if (typeof L !== 'undefined' && regions.length > 0) {
-      // Calculate center point from all regions
-      const centerLat = regions.reduce((sum, r) => sum + r.lat, 0) / regions.length;
-      const centerLng = regions.reduce((sum, r) => sum + r.lng, 0) / regions.length;
+    const hasLeaflet = typeof L !== 'undefined';
+    const validRegions = Array.isArray(regions)
+      ? regions.filter((r) => Number.isFinite(r?.lat) && Number.isFinite(r?.lng))
+      : [];
+
+    if (hasLeaflet && validRegions.length > 0) {
+      // Calculate center point from valid regions only
+      const centerLat = validRegions.reduce((sum, r) => sum + r.lat, 0) / validRegions.length;
+      const centerLng = validRegions.reduce((sum, r) => sum + r.lng, 0) / validRegions.length;
 
       // Initialize Leaflet map
       const map = L.map(mapContainer.id, {
@@ -1344,8 +1602,8 @@ function renderMapCard({ title, description, regions, formatter, emptyCopy }) {
         maxZoom: 18,
       }).addTo(map);
 
-      // Add markers for each region
-      regions.forEach((region) => {
+      // Add markers for each valid region
+      validRegions.forEach((region) => {
         // Create custom marker with buyer count
         const markerHtml = `
           <div style="
@@ -1391,14 +1649,14 @@ function renderMapCard({ title, description, regions, formatter, emptyCopy }) {
       });
 
       // Fit map to show all markers
-      if (regions.length > 1) {
+      if (validRegions.length > 1) {
         const group = L.featureGroup(
-          regions.map(r => L.marker([r.lat, r.lng]))
+          validRegions.map(r => L.marker([r.lat, r.lng]))
         );
         map.fitBounds(group.getBounds().pad(0.1));
       }
 
-    } else if (regions.length === 0) {
+    } else if (!Array.isArray(regions) || regions.length === 0) {
       // Show empty state if no regions
       mapContainer.style.cssText += `
         display: flex;
@@ -1419,7 +1677,7 @@ function renderMapCard({ title, description, regions, formatter, emptyCopy }) {
         color: #dc2626;
         border: 1px solid rgba(239, 68, 68, 0.3);
       `;
-      mapContainer.textContent = 'Map library not loaded. Please refresh the page.';
+      mapContainer.textContent = 'Map not available for this dataset. Please refresh the page.';
     }
   }, 100);
 
@@ -1474,46 +1732,12 @@ function simulateMatchSummary(data) {
 
 renderApp();
 
-function openUpgradePrompt() {
-  alert('To message matched buyers and see detailed snippets, upgrade to Seller · Pro for personalized insights and anonymous communication.');
-}
-
-function openPropertyInsights(profile) {
-  const summary = getPropertyMatchSummary(profile);
-  
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
-    <div class="modal-content">
-      <header class="modal-header">
-        <h2>${profile?.nickname || 'Property'} Insights</h2>
-        <button class="close-modal">&times;</button>
-      </header>
-      <div class="modal-body">
-        <p><strong>Match Score:</strong> ${Math.round(summary.topScore || 0)}%</p>
-        <p><strong>Matching Buyers:</strong> ${summary.matches || 0}</p>
-        <p><strong>Summary:</strong> ${canSeeSnippets() ? summary.snippet : 'Upgrade to see detailed buyer wishlist summaries.'}</p>
-        ${summary.gaps?.length ? `<p><strong>Gaps:</strong> ${summary.gaps.join(', ')}</p>` : ''}
-      </div>
-      <footer class="modal-footer">
-        <button class="primary-button close-modal">Close</button>
-      </footer>
-    </div>
-  `;
-  
-  modal.querySelectorAll('.close-modal').forEach(btn => {
-    btn.addEventListener('click', () => document.body.removeChild(modal));
-  });
-  
-  document.body.appendChild(modal);
-}
-
+// Keep updatePropertyCards available for future use without throwing if not used
 function updatePropertyCards() {
   const container = document.getElementById('property-grid') || document.querySelector('.property-grid');
   if (!container) return;
-  
   container.innerHTML = '';
-  profilesData.forEach(profile => {
+  (Array.isArray(propertyProfiles) ? propertyProfiles : []).forEach((profile) => {
     const card = renderPropertyCard(profile);
     container.appendChild(card);
   });

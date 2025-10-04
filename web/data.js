@@ -82,10 +82,11 @@ export const buyers = [
 ];
 
 export const buyerMapRegions = [
-  { id: 'region-1', label: 'Port Moody Centre', count: 12, x: 32, y: 48 },
-  { id: 'region-2', label: 'Pleasantside', count: 6, x: 18, y: 62 },
-  { id: 'region-3', label: 'Olympic Village', count: 5, x: 58, y: 38 },
-  { id: 'region-4', label: 'Coal Harbour', count: 4, x: 72, y: 22 },
+  // Added lat/lng to support Leaflet map rendering
+  { id: 'region-1', label: 'Port Moody Centre', count: 12, lat: 49.2838, lng: -122.8311, x: 32, y: 48 },
+  { id: 'region-2', label: 'Pleasantside', count: 6, lat: 49.3006, lng: -122.9000, x: 18, y: 62 },
+  { id: 'region-3', label: 'Olympic Village', count: 5, lat: 49.2706, lng: -123.1036, x: 58, y: 38 },
+  { id: 'region-4', label: 'Coal Harbour', count: 4, lat: 49.2917, lng: -123.1239, x: 72, y: 22 },
 ];
 
 export const propertyProfiles = [
@@ -93,6 +94,8 @@ export const propertyProfiles = [
     id: 'property-1',
     nickname: 'Evergreen Terrace Home',
     location: 'Port Moody (approx.)',
+    lat: 49.289,
+    lng: -122.84,
     summary: '4 bed, 3 bath craftsman home with EV-ready garage and mature trees.',
     matchScore: 88,
     matchBand: 'Top match 92%',
@@ -171,7 +174,7 @@ export const sellerAnalytics = {
     { label: '6-12m', value: 20 },
   ],
   paidInsights: {
-    trendsLockedCopy: 'Upgrade to unlock historical demand trends and compare multiple Property Profiles side by side.',
+    trendsLockedCopy: 'Upgrade to unlock historical demand trends and benchmark your home against your market segment.',
   },
 };
 
