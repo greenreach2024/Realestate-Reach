@@ -1,6 +1,18 @@
 import http from 'http';
 import { parse } from 'url';
 import { PROVIDER_PRECEDENCE, trendSeries } from './marketTrendsData.js';
+import {
+  createShare,
+  deleteShare,
+  getHome,
+  getHomeOwnerId,
+  getShare,
+  getWishlistMatchSummary,
+  getWishlistSnapshot,
+  sanitiseScope,
+  updateShare,
+  upsertShare,
+} from './dataStore.js';
 
 const PORT = Number.parseInt(process.env.PORT ?? '3000', 10);
 const FALLBACK_GEOS = {
@@ -115,7 +127,142 @@ function respondJson(res, statusCode, payload, extraHeaders = {}) {
       res.setHeader(key, value);
     }
   });
+  if (statusCode === 204) {
+    res.end();
+    return;
+  }
   res.end(JSON.stringify(payload));
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 1_000_000) {
+        reject(new Error('Payload too large'));
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      if (!raw.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function parseScopes(headerValue) {
+  if (!headerValue) return [];
+  return String(headerValue)
+    .split(/[\s,]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+}
+
+function attachAuthContext(req) {
+  const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
+  const role = req.headers['x-role'] ? String(req.headers['x-role']) : null;
+  const scopes = parseScopes(req.headers['x-scopes']);
+  const auth = { userId, role, scopes };
+  req.auth = auth;
+  return auth;
+}
+
+function requireAuth(req, res) {
+  const auth = req.auth ?? attachAuthContext(req);
+  if (!auth.userId || !auth.role) {
+    respondJson(res, 401, { code: 'UNAUTHENTICATED', message: 'Authentication is required for this route.' });
+    return null;
+  }
+  return auth;
+}
+
+function isSellerForHome(auth, homeOwnerId) {
+  return auth.role === 'seller' && auth.userId === homeOwnerId;
+}
+
+function isManagingAgent(auth) {
+  return auth.role === 'agent' && auth.scopes.includes('homes:manage');
+}
+
+async function canReadSharedHome(req, res, homeId) {
+  const auth = requireAuth(req, res);
+  if (!auth) {
+    return null;
+  }
+
+  const ownerId = await Promise.resolve(getHomeOwnerId(homeId));
+  if (ownerId && (isSellerForHome(auth, ownerId) || isManagingAgent(auth))) {
+    req.shareScope = { address: true, photos: true, profile: true };
+    return req.shareScope;
+  }
+
+  if (auth.role !== 'buyer') {
+    respondJson(res, 403, { code: 'FORBIDDEN', message: 'Only buyers with a valid share grant may view this resource.' });
+    return null;
+  }
+
+  const share = await Promise.resolve(getShare({ homeId, buyerId: auth.userId }));
+  if (!share) {
+    respondJson(res, 403, { code: 'NO_SHARE', message: 'Owner has not shared this home.' });
+    return null;
+  }
+  if (share.expires_at && new Date(share.expires_at) < new Date()) {
+    respondJson(res, 403, { code: 'SHARE_EXPIRED', message: 'Share has expired.' });
+    return null;
+  }
+  req.shareScope = share.scope ?? {};
+  return req.shareScope;
+}
+
+function buildSharedHomePayload(home, scope = {}) {
+  if (!home) return null;
+  const safeScope = typeof scope === 'object' && scope !== null ? scope : {};
+  return {
+    id: home.id,
+    type: home.type,
+    beds: home.beds,
+    baths: home.baths,
+    featureSummary: safeScope.profile ? home.feature_summary : undefined,
+    photos: safeScope.photos
+      ? (Array.isArray(home.photos) ? home.photos.map((photo) => ({ id: photo.id, url: photo.cdn_url })) : [])
+      : [],
+    address: safeScope.address
+      ? home.full_address
+      : { area: home.neighbourhood, city: home.city },
+  };
+}
+
+function buildWishlistAggregateResponse(snapshot) {
+  if (!snapshot) return null;
+  const topFit = snapshot.topFit
+    ? { homeId: snapshot.topFit.homeId, score: snapshot.topFit.score }
+    : null;
+  return {
+    id: snapshot.id,
+    matchCount: snapshot.matchCount,
+    topFit,
+    newSince: snapshot.newSince,
+  };
+}
+
+function normaliseExpiry(value) {
+  if (value === null || typeof value === 'undefined' || value === '') {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString();
 }
 
 function handleMarketTrends(req, res, query) {
@@ -196,20 +343,223 @@ function handleMarketTrends(req, res, query) {
   respondJson(res, 200, response, headers);
 }
 
-const server = http.createServer((req, res) => {
+async function handleCreateShare(req, res, homeId) {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  const home = getHome(homeId);
+  if (!home) {
+    respondJson(res, 404, { code: 'HOME_NOT_FOUND', message: 'Home not found.' });
+    return;
+  }
+
+  const ownerId = getHomeOwnerId(homeId);
+  if (!(isSellerForHome(auth, ownerId) || isManagingAgent(auth))) {
+    respondJson(res, 403, { code: 'FORBIDDEN', message: 'Only the owner or managing agent may share this home.' });
+    return;
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    respondJson(res, 400, { code: 'INVALID_JSON', message: 'Body must be valid JSON.', detail: error.message });
+    return;
+  }
+
+  const buyerId = body?.buyerId ? String(body.buyerId) : null;
+  if (!buyerId) {
+    respondJson(res, 400, { code: 'INVALID_REQUEST', message: 'buyerId is required.' });
+    return;
+  }
+
+  const scope = sanitiseScope(body.scope ?? {});
+  const expiresAt = normaliseExpiry(body.expiresAt);
+  const record = upsertShare(homeId, { buyerId, scope, expiresAt });
+  respondJson(res, 201, record);
+}
+
+async function handleUpdateShare(req, res, homeId, shareId) {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  const home = getHome(homeId);
+  if (!home) {
+    respondJson(res, 404, { code: 'HOME_NOT_FOUND', message: 'Home not found.' });
+    return;
+  }
+
+  const ownerId = getHomeOwnerId(homeId);
+  if (!(isSellerForHome(auth, ownerId) || isManagingAgent(auth))) {
+    respondJson(res, 403, { code: 'FORBIDDEN', message: 'Only the owner or managing agent may update share grants.' });
+    return;
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    respondJson(res, 400, { code: 'INVALID_JSON', message: 'Body must be valid JSON.', detail: error.message });
+    return;
+  }
+
+  const updates = {};
+  if (typeof body.scope !== 'undefined') {
+    updates.scope = sanitiseScope(body.scope);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'expiresAt')) {
+    updates.expiresAt = normaliseExpiry(body.expiresAt);
+  }
+
+  const record = updateShare(homeId, shareId, updates);
+  if (!record) {
+    respondJson(res, 404, { code: 'SHARE_NOT_FOUND', message: 'Share not found for this home.' });
+    return;
+  }
+  respondJson(res, 200, record);
+}
+
+async function handleDeleteShare(req, res, homeId, shareId) {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  const home = getHome(homeId);
+  if (!home) {
+    respondJson(res, 404, { code: 'HOME_NOT_FOUND', message: 'Home not found.' });
+    return;
+  }
+
+  const ownerId = getHomeOwnerId(homeId);
+  if (!(isSellerForHome(auth, ownerId) || isManagingAgent(auth))) {
+    respondJson(res, 403, { code: 'FORBIDDEN', message: 'Only the owner or managing agent may revoke shares.' });
+    return;
+  }
+
+  const success = deleteShare(homeId, shareId);
+  if (!success) {
+    respondJson(res, 404, { code: 'SHARE_NOT_FOUND', message: 'Share not found for this home.' });
+    return;
+  }
+  respondJson(res, 204, null);
+}
+
+async function handleGetSharedHome(req, res, homeId) {
+  const scope = await canReadSharedHome(req, res, homeId);
+  if (!scope) return;
+
+  const home = getHome(homeId);
+  if (!home) {
+    respondJson(res, 404, { code: 'HOME_NOT_FOUND', message: 'Home not found.' });
+    return;
+  }
+
+  const payload = buildSharedHomePayload(home, scope);
+  respondJson(res, 200, payload);
+}
+
+async function handleWishlistSnapshot(req, res, wishlistId) {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  const snapshot = getWishlistSnapshot(wishlistId);
+  if (!snapshot) {
+    respondJson(res, 404, { code: 'WISHLIST_NOT_FOUND', message: 'Wishlist not found.' });
+    return;
+  }
+
+  const payload = buildWishlistAggregateResponse(snapshot);
+  respondJson(res, 200, payload);
+}
+
+async function handleWishlistMatches(req, res, wishlistId) {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+
+  const snapshot = getWishlistSnapshot(wishlistId);
+  if (!snapshot) {
+    respondJson(res, 404, { code: 'WISHLIST_NOT_FOUND', message: 'Wishlist not found.' });
+    return;
+  }
+
+  const aggregate = buildWishlistAggregateResponse(snapshot);
+
+  if (auth.role === 'buyer') {
+    respondJson(res, 200, {
+      ...aggregate,
+      homes: [],
+      restricted: true,
+      message: 'Buyer access is limited to aggregate insights. Request a share grant for itemised details.',
+    });
+    return;
+  }
+
+  const matches = getWishlistMatchSummary(wishlistId);
+  respondJson(res, 200, {
+    ...aggregate,
+    homes: matches,
+  });
+}
+
+const server = http.createServer(async (req, res) => {
   const { pathname, query } = parse(req.url, true);
 
-  if (req.method === 'GET' && pathname === '/healthz') {
-    respondJson(res, 200, { status: 'ok', timestamp: new Date().toISOString() });
-    return;
-  }
+  try {
+    if (req.method === 'GET' && pathname === '/healthz') {
+      respondJson(res, 200, { status: 'ok', timestamp: new Date().toISOString() });
+      return;
+    }
 
-  if (req.method === 'GET' && pathname === '/market-trends') {
-    handleMarketTrends(req, res, query);
-    return;
-  }
+    if (req.method === 'GET' && pathname === '/market-trends') {
+      handleMarketTrends(req, res, query);
+      return;
+    }
 
-  respondJson(res, 404, { error: 'NotFound', detail: 'Route not found.' });
+    const createShareMatch = pathname.match(/^\/homes\/([^/]+)\/shares$/);
+    if (createShareMatch && req.method === 'POST') {
+      await handleCreateShare(req, res, createShareMatch[1]);
+      return;
+    }
+
+    const shareDetailMatch = pathname.match(/^\/homes\/([^/]+)\/shares\/([^/]+)$/);
+    if (shareDetailMatch) {
+      if (req.method === 'PATCH') {
+        await handleUpdateShare(req, res, shareDetailMatch[1], shareDetailMatch[2]);
+        return;
+      }
+      if (req.method === 'DELETE') {
+        await handleDeleteShare(req, res, shareDetailMatch[1], shareDetailMatch[2]);
+        return;
+      }
+    }
+
+    const sharedHomeMatch = pathname.match(/^\/shared\/homes\/([^/]+)$/);
+    if (sharedHomeMatch && req.method === 'GET') {
+      await handleGetSharedHome(req, res, sharedHomeMatch[1]);
+      return;
+    }
+
+    const wishlistSnapshotMatch = pathname.match(/^\/wishlists\/([^/]+)\/supply-snapshot$/);
+    if (wishlistSnapshotMatch && req.method === 'GET') {
+      await handleWishlistSnapshot(req, res, wishlistSnapshotMatch[1]);
+      return;
+    }
+
+    const wishlistMatchesMatch = pathname.match(/^\/wishlists\/([^/]+)\/matched-homes$/);
+    if (wishlistMatchesMatch && req.method === 'GET') {
+      await handleWishlistMatches(req, res, wishlistMatchesMatch[1]);
+      return;
+    }
+
+    respondJson(res, 404, { error: 'NotFound', detail: 'Route not found.' });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Unhandled error', error);
+    if (!res.headersSent) {
+      respondJson(res, 500, { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' });
+    } else {
+      res.destroy();
+    }
+  }
 });
 
 server.listen(PORT, () => {

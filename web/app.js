@@ -22,18 +22,36 @@ const budgetBenchmarks = {
 };
 
 const appRoot = document.getElementById('app-root');
-const roleSelect = document.getElementById('role-select');
+const sidebarContainer = document.getElementById('sidebar-container');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const globalNewButton = document.getElementById('global-new-button');
 const modal = document.getElementById('modal');
 const modalTitle = document.getElementById('modal-title');
 const modalContent = document.getElementById('modal-content');
 
+const SIDEBAR_PIN_KEY = 'rr_sidebar_pinned';
+let storedPinPreference = true;
+try {
+  const stored = localStorage.getItem(SIDEBAR_PIN_KEY);
+  if (stored !== null) {
+    storedPinPreference = stored === 'true';
+  }
+} catch (error) {
+  storedPinPreference = true;
+}
+
 const state = {
-  view: 'landing',
+  view: 'role',
   role: 'buyer',
   buyerId: buyers[0].id,
   sellerTier: 'free',
   selectedWishlistId: buyers?.[0]?.wishlists?.[0]?.id ?? null,
+  sidebarPinned: storedPinPreference,
+  userRoles: ['buyer', 'seller', 'agent'],
 };
+
+let roleSelect = null;
 
 // Gating helpers for Seller/Agent
 function canSeeSnippets() {
@@ -79,20 +97,300 @@ const generateId = (prefix) => {
   return `${prefix}-${random}`;
 };
 
-const navButtons = document.querySelectorAll('.nav-btn');
-navButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    if (button.dataset && button.dataset.target) {
-      state.view = button.dataset.target;
-      renderApp();
+const SIDEBAR_ITEMS = [
+  { id: 'buyer-wishlists', label: 'Wishlists', icon: '📝', view: 'role', roles: ['buyer'], role: 'buyer' },
+  { id: 'buyer-budget', label: 'Budget Coach', icon: '📈', view: 'budget-coach', roles: ['buyer'], role: 'buyer' },
+  { id: 'buyer-messages', label: 'Messages', icon: '💬', view: 'messages', roles: ['buyer'], role: 'buyer' },
+  { id: 'buyer-account', label: 'Account & Privacy', icon: '🛡️', view: 'account', roles: ['buyer'], role: 'buyer' },
+  { id: 'seller-homes', label: 'My Homes', icon: '🏠', view: 'seller-homes', roles: ['seller'], role: 'seller' },
+  { id: 'seller-matches', label: 'Buyer Matches', icon: '🎯', view: 'seller-matches', roles: ['seller'], role: 'seller' },
+  { id: 'seller-insights', label: 'Insights', icon: '📊', view: 'seller-insights', roles: ['seller'], role: 'seller' },
+  { id: 'seller-messages', label: 'Messages', icon: '💬', view: 'messages', roles: ['seller'], role: 'seller' },
+  { id: 'seller-billing', label: 'Subscriptions & Billing', icon: '💳', view: 'seller-billing', roles: ['seller'], role: 'seller' },
+  { id: 'agent-analytics', label: 'Demand Analytics', icon: '🔥', view: 'agent-analytics', roles: ['agent'], role: 'agent' },
+  { id: 'agent-segments', label: 'Buyer Segments', icon: '👥', view: 'agent-segments', roles: ['agent'], role: 'agent' },
+  { id: 'agent-homes', label: 'My Sellers & Homes', icon: '🏘️', view: 'agent-homes', roles: ['agent'], role: 'agent' },
+  { id: 'agent-messages', label: 'Messages', icon: '💬', view: 'messages', roles: ['agent'], role: 'agent' },
+  { id: 'agent-billing', label: 'Billing & Licenses', icon: '🧾', view: 'agent-billing', roles: ['agent'], role: 'agent' },
+];
+
+const DEFAULT_VIEW_BY_ROLE = {
+  buyer: 'role',
+  seller: 'seller-homes',
+  agent: 'agent-analytics',
+  mortgage: 'role',
+};
+
+const NEW_BUTTON_LABELS = {
+  buyer: 'New Wishlist',
+  seller: 'New Home',
+  agent: 'New Segment',
+  mortgage: 'New Lead',
+};
+
+function getDefaultViewForRole(role) {
+  return DEFAULT_VIEW_BY_ROLE[role] ?? 'role';
+}
+
+function isCompactViewport() {
+  return window.matchMedia('(max-width: 1024px)').matches;
+}
+
+function isDrawerViewport() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function getVisibleSidebarItems(role) {
+  return SIDEBAR_ITEMS.filter((item) => item.roles.includes(role));
+}
+
+function getActiveSidebarId(role, view) {
+  const items = getVisibleSidebarItems(role);
+  const match = items.find((item) => item.view === view);
+  return match?.id ?? items[0]?.id ?? null;
+}
+
+function updateGlobalNewButton() {
+  if (!globalNewButton) return;
+  const label = NEW_BUTTON_LABELS[state.role] ?? 'New';
+  globalNewButton.textContent = label;
+  globalNewButton.setAttribute('aria-label', label);
+}
+
+function bindRoleSelect(select) {
+  if (roleSelect === select) return;
+  if (roleSelect) {
+    roleSelect.removeEventListener('change', handleRoleChange);
+  }
+  roleSelect = select;
+  if (roleSelect) {
+    roleSelect.addEventListener('change', handleRoleChange);
+  }
+}
+
+function closeSidebarDrawer() {
+  if (!document.body.classList.contains('sidebar-open')) return;
+  document.body.classList.remove('sidebar-open');
+  if (sidebarOverlay) sidebarOverlay.hidden = true;
+  if (sidebarToggle) sidebarToggle.setAttribute('aria-expanded', 'false');
+  renderSidebar();
+}
+
+function handleRoleChange(event) {
+  const nextRole = event.target.value;
+  state.role = nextRole;
+  state.view = getDefaultViewForRole(nextRole);
+  closeSidebarDrawer();
+  renderSidebar();
+  renderApp();
+}
+
+function handleSidebarNavigation(item) {
+  if (item.role && state.role !== item.role) {
+    state.role = item.role;
+  }
+  state.view = item.view;
+  closeSidebarDrawer();
+  renderSidebar();
+  renderApp();
+}
+
+function handleGlobalNewClick() {
+  if (state.role === 'buyer') {
+    openWishlistForm('Create Buyer Wishlist');
+    return;
+  }
+  if (state.role === 'seller') {
+    const home = (homeProfiles || [])[0] ?? { priceExpectation: '', status: 'Not for sale', summary: '' };
+    openEditHomeModal(home);
+    return;
+  }
+  if (state.role === 'agent') {
+    openAgentSegmentModal();
+    return;
+  }
+  window.openAuthModal?.('register');
+}
+
+function renderSidebar() {
+  if (!sidebarContainer) return;
+  const isResponsive = isCompactViewport();
+  const isDrawer = isDrawerViewport();
+  const drawerOpen = document.body.classList.contains('sidebar-open');
+  const shouldCollapse = (!state.sidebarPinned && !isResponsive) || (isResponsive && !drawerOpen);
+
+  sidebarContainer.classList.toggle('sidebar--collapsed', shouldCollapse && !drawerOpen);
+  sidebarContainer.classList.toggle('sidebar--expanded', drawerOpen || (!shouldCollapse));
+  sidebarContainer.classList.toggle('sidebar--drawer', isDrawer);
+
+  sidebarContainer.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'sidebar__inner';
+
+  const header = document.createElement('div');
+  header.className = 'sidebar__header';
+  const title = document.createElement('span');
+  title.className = 'sidebar__title';
+  title.textContent = 'Buyer Registry';
+  header.append(title);
+
+  const pinButton = document.createElement('button');
+  pinButton.className = 'sidebar__pin';
+  pinButton.type = 'button';
+  pinButton.setAttribute('aria-pressed', state.sidebarPinned ? 'true' : 'false');
+  pinButton.setAttribute('aria-label', state.sidebarPinned ? 'Collapse navigation' : 'Pin navigation');
+  pinButton.textContent = state.sidebarPinned ? '📌' : '📍';
+  pinButton.addEventListener('click', () => {
+    state.sidebarPinned = !state.sidebarPinned;
+    try { localStorage.setItem(SIDEBAR_PIN_KEY, String(state.sidebarPinned)); } catch {}
+    renderSidebar();
+  });
+  header.append(pinButton);
+
+  const nav = document.createElement('nav');
+  nav.className = 'sidebar__nav';
+  nav.setAttribute('aria-label', 'Primary');
+
+  const list = document.createElement('ul');
+  list.className = 'sidebar__list';
+  const visibleItems = getVisibleSidebarItems(state.role);
+  const activeId = getActiveSidebarId(state.role, state.view);
+  const threads = getThreadsForRole(state.role);
+  const unread = threads.filter((thread) => thread.status && /new|ready/i.test(thread.status)).length;
+
+  visibleItems.forEach((item) => {
+    const li = document.createElement('li');
+    li.className = 'sidebar__item';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sidebar__link';
+    button.dataset.id = item.id;
+    if (item.id === activeId) {
+      button.setAttribute('aria-current', 'page');
+    }
+
+    const icon = document.createElement('span');
+    icon.className = 'sidebar__icon';
+    icon.textContent = item.icon;
+    button.append(icon);
+
+    const label = document.createElement('span');
+    label.className = 'sidebar__label';
+    label.textContent = item.label;
+    button.append(label);
+
+    if (item.view === 'messages' && unread > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'sidebar__badge';
+      badge.textContent = unread.toString();
+      button.append(badge);
+      button.title = `${item.label} (${unread} unread)`;
+    } else {
+      button.title = item.label;
+    }
+
+    button.addEventListener('click', () => handleSidebarNavigation(item));
+    li.append(button);
+    list.append(li);
+  });
+
+  if (!visibleItems.length) {
+    const placeholder = document.createElement('p');
+    placeholder.className = 'section-description';
+    placeholder.textContent = 'Navigation unavailable for this role.';
+    nav.append(placeholder);
+  }
+
+  const focusable = Array.from(list.querySelectorAll('.sidebar__link'));
+  focusable.forEach((button, index) => {
+    button.addEventListener('keydown', (event) => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(event.key)) return;
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        button.click();
+        return;
+      }
+      event.preventDefault();
+      if (focusable.length === 0) return;
+      let nextIndex = index;
+      if (event.key === 'ArrowDown') {
+        nextIndex = (index + 1) % focusable.length;
+      } else if (event.key === 'ArrowUp') {
+        nextIndex = (index - 1 + focusable.length) % focusable.length;
+      } else if (event.key === 'Home') {
+        nextIndex = 0;
+      } else if (event.key === 'End') {
+        nextIndex = focusable.length - 1;
+      }
+      focusable[nextIndex].focus();
+    });
+  });
+
+  nav.append(list);
+  wrapper.append(header, nav);
+
+  const multiRole = Array.isArray(state.userRoles) && state.userRoles.length > 1;
+  const footer = document.createElement('div');
+  footer.className = 'sidebar__footer';
+  if (multiRole) {
+    const switcher = document.createElement('div');
+    switcher.className = 'role-switcher';
+    const label = document.createElement('label');
+    label.setAttribute('for', 'role-select');
+    label.textContent = 'Role experience';
+    const select = document.createElement('select');
+    select.id = 'role-select';
+    state.userRoles.forEach((role) => {
+      const option = document.createElement('option');
+      option.value = role;
+      option.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+      select.append(option);
+    });
+    select.value = state.role;
+    switcher.append(label, select);
+    footer.append(switcher);
+    bindRoleSelect(select);
+  } else {
+    bindRoleSelect(null);
+  }
+
+  if (footer.children.length) {
+    wrapper.append(footer);
+  }
+
+  sidebarContainer.append(wrapper);
+  updateGlobalNewButton();
+  if (sidebarOverlay) {
+    sidebarOverlay.hidden = !drawerOpen;
+  }
+}
+
+if (sidebarToggle) {
+  sidebarToggle.addEventListener('click', () => {
+    const open = !document.body.classList.contains('sidebar-open');
+    if (open) {
+      document.body.classList.add('sidebar-open');
+      sidebarToggle.setAttribute('aria-expanded', 'true');
+      renderSidebar();
+    } else {
+      closeSidebarDrawer();
     }
   });
-});
+}
 
-roleSelect.addEventListener('change', (event) => {
-  state.role = event.target.value;
-  state.view = 'role';
-  renderApp();
+if (sidebarOverlay) {
+  sidebarOverlay.addEventListener('click', () => {
+    closeSidebarDrawer();
+  });
+}
+
+if (globalNewButton) {
+  globalNewButton.addEventListener('click', handleGlobalNewClick);
+}
+
+window.addEventListener('resize', () => {
+  renderSidebar();
 });
 
 modal.addEventListener('close', () => {
@@ -102,11 +400,13 @@ modal.addEventListener('close', () => {
 // Expose handlers used by inline onclick in index.html
 // These must be on window because app.js is an ES module
 window.showNotificationCenter = () => {
+  closeSidebarDrawer();
   state.view = 'notifications';
   renderApp();
 };
 
 window.showNotificationSettings = () => {
+  closeSidebarDrawer();
   modalTitle.textContent = 'Notification settings';
   modalContent.innerHTML = `
     <form class="form-grid">
@@ -126,6 +426,7 @@ window.showNotificationSettings = () => {
 };
 
 function renderApp() {
+  renderSidebar();
   appRoot.innerHTML = '';
 
   switch (state.view) {
@@ -150,6 +451,36 @@ function renderApp() {
     case 'subscription':
       appRoot.append(renderSubscriptions());
       break;
+    case 'budget-coach':
+      appRoot.append(renderBuyerBudgetCoachView());
+      break;
+    case 'account':
+      appRoot.append(renderAccountPrivacyView());
+      break;
+    case 'seller-homes':
+      appRoot.append(renderSellerExperience());
+      break;
+    case 'seller-matches':
+      appRoot.append(renderSellerMatchesView());
+      break;
+    case 'seller-insights':
+      appRoot.append(renderSellerInsightsView());
+      break;
+    case 'seller-billing':
+      appRoot.append(renderSellerBillingView());
+      break;
+    case 'agent-analytics':
+      appRoot.append(renderAgentExperience());
+      break;
+    case 'agent-segments':
+      appRoot.append(renderAgentSegmentsView());
+      break;
+    case 'agent-homes':
+      appRoot.append(renderAgentHomesView());
+      break;
+    case 'agent-billing':
+      appRoot.append(renderAgentBillingView());
+      break;
     case 'role':
     default:
       appRoot.append(renderRoleExperience());
@@ -158,6 +489,7 @@ function renderApp() {
 
 // Expose simple navigation for other modules (e.g., auth.js) and inline buttons
 window.gotoView = (view) => {
+  closeSidebarDrawer();
   state.view = view;
   renderApp();
 };
@@ -169,7 +501,10 @@ window.authComplete = (role) => {
     if (sel) sel.value = role;
   } catch {}
   state.role = role;
-  state.view = 'role';
+  if (!state.userRoles.includes(role)) {
+    state.userRoles = [...state.userRoles, role];
+  }
+  state.view = getDefaultViewForRole(role);
   renderAuthActions();
   renderApp();
 };
@@ -319,7 +654,7 @@ function renderLanding() {
       title: 'Compliance by design',
       body: 'In-app, anonymized messaging with disclosure controls and privacy-safe maps. The system publishes demand, not supply.',
     },
-  ];
+];
 
   cards.forEach((card) => {
     const el = document.createElement('article');
@@ -453,6 +788,59 @@ function renderBuyerExperience() {
   wrapper.append(renderWishlistProfile(buyer, wishlist));
   wrapper.append(renderBuyerInsights(buyer), renderBuyerMessaging(buyer), renderBuyerNotifications(buyer));
   return wrapper;
+}
+
+function renderBuyerBudgetCoachView() {
+  const buyer = buyers.find((b) => b.id === state.buyerId) ?? buyers[0];
+  const container = document.createElement('div');
+  container.className = 'buyer-experience';
+
+  const wishlist = buyer?.wishlists?.find((w) => w.id === state.selectedWishlistId) ?? buyer?.wishlists?.[0] ?? null;
+  const section = createSection({
+    title: 'Budget Coach',
+    description: 'Track how your price guardrails align with live market shifts. No listings are surfaced — only demand context.',
+  });
+
+  if (wishlist) {
+    section.append(renderBudgetCoachCard(wishlist));
+  } else {
+    section.append(createEmptyState('Create a wishlist to unlock personalised Budget Coach guidance.'));
+  }
+
+  container.append(section);
+  if (buyer) {
+    container.append(renderBuyerMessaging(buyer), renderBuyerNotifications(buyer));
+  }
+  return container;
+}
+
+function renderAccountPrivacyView() {
+  const section = createSection({
+    title: 'Account & Privacy',
+    description: 'Control how your wishlists, notifications, and messaging preferences are shared across the registry.',
+  });
+
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-header">
+      <h3>Privacy controls</h3>
+      <p class="section-description">Buyers publish demand only. No addresses or personal contact details are shown.</p>
+    </div>
+    <div class="card-body">
+      <ul class="feature-list">
+        <li><strong>Share scope</strong>: Owners decide if address, photos, or profile details are visible.</li>
+        <li><strong>Messaging</strong>: All conversations stay in-app until both parties consent to disclose info.</li>
+        <li><strong>Notifications</strong>: Opt into demand alerts without exposing buyer or seller identities.</li>
+      </ul>
+      <div class="form-actions">
+        <button class="ghost-button" type="button" onclick="showNotificationSettings()">Notification preferences</button>
+      </div>
+    </div>
+  `;
+
+  section.append(card);
+  return section;
 }
 
 function renderWishlistProfile(buyer, wishlist) {
@@ -1470,6 +1858,60 @@ function renderSellerExperience() {
   return container;
 }
 
+function renderSellerMatchesView() {
+  const home = (homeProfiles || [])[0];
+  if (!home) {
+    return createEmptyState('Add a Home Profile to review anonymised buyer matches.');
+  }
+  const container = document.createElement('div');
+  container.className = 'seller-experience';
+  container.append(renderBuyerMatchesSection(home));
+  return container;
+}
+
+function renderSellerInsightsView() {
+  const home = (homeProfiles || [])[0];
+  if (!home) {
+    return createEmptyState('Insights appear once a Home Profile is activated.');
+  }
+  const container = document.createElement('div');
+  container.className = 'seller-experience';
+  container.append(
+    renderDemandSnapshotSection(home),
+    renderWishlistFitSection(home),
+    renderFeatureFitSection(home),
+    renderDemandMapSection(home),
+  );
+  return container;
+}
+
+function renderSellerBillingView() {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'seller-experience';
+  const section = createSection({
+    title: 'Subscriptions & Billing',
+    description: 'Manage Seller · Pro upgrades and review invoicing history. Billing data remains private to the owner.',
+  });
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-body">
+      <p>Seller · Free keeps demand aggregates visible while masking buyers. Upgrade to Seller · Pro to unlock messaging and geo heatmaps.</p>
+      <ul class="feature-list">
+        <li><strong>Current plan:</strong> Seller · ${state.sellerTier === 'pro' ? 'Pro' : 'Free'}</li>
+        <li><strong>Next renewal:</strong> ${new Date().toLocaleDateString()}</li>
+        <li><strong>Payment method:</strong> **** 4242 (secured)</li>
+      </ul>
+      <div class="form-actions">
+        <button class="primary-button" type="button">Manage subscription</button>
+      </div>
+    </div>
+  `;
+  section.append(card);
+  wrapper.append(section, renderSubscriptions());
+  return wrapper;
+}
+
 function formatHomeArea(home) {
   if (!home) return 'your area';
   if (home.location) {
@@ -2324,6 +2766,111 @@ function renderAgentExperience() {
 
   section.append(overview, table);
   return section;
+}
+
+function renderAgentSegmentsView() {
+  const section = createSection({
+    title: 'Buyer Segments',
+    description: 'Group active demand cohorts without exposing buyer identities.',
+  });
+  const grid = document.createElement('div');
+  grid.className = 'grid grid-2';
+
+  (buyers || []).slice(0, 4).forEach((buyer) => {
+    const wishlist = buyer?.wishlists?.[0];
+    if (!wishlist) return;
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-header">
+        <div>
+          <h3>${wishlist.name}</h3>
+          <p class="section-description">${wishlist.summary}</p>
+        </div>
+        <span class="badge">${wishlist.matchRange}</span>
+      </div>
+      <div class="card-body">
+        <p><strong>Target areas:</strong> ${(wishlist.locations || []).map((loc) => loc.label).join(', ') || 'TBD'}</p>
+        <p><strong>Budget band:</strong> ${formatBudgetBand(wishlist.budget)}</p>
+        <p><strong>Top match:</strong> ${wishlist.topScore ?? '—'}%</p>
+      </div>
+    `;
+    grid.append(card);
+  });
+
+  if (!grid.children.length) {
+    grid.append(createEmptyState('Segments populate as buyers publish wishlists.'));
+  }
+
+  section.append(grid);
+  return section;
+}
+
+function renderAgentHomesView() {
+  const section = createSection({
+    title: 'My Sellers & Homes',
+    description: 'Monitor linked Home Profiles with private demand summaries.',
+  });
+  const grid = document.createElement('div');
+  grid.className = 'grid grid-2';
+
+  (homeProfiles || []).forEach((home) => {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-header">
+        <div>
+          <h3>${home.nickname || home.location || 'Home Profile'}</h3>
+          <p class="section-description">${home.summary || 'Private listing — demand only.'}</p>
+        </div>
+        <span class="badge">${home.status || 'Inactive'}</span>
+      </div>
+      <div class="card-body">
+        <p><strong>Match count:</strong> ${home?.demandSnapshot?.matchCount ?? home.matchedBuyers ?? 0}</p>
+        <p><strong>Top match:</strong> ${formatPercent(home?.demandSnapshot?.topMatch ?? home.matchScore, 0)}</p>
+        <p><strong>Area:</strong> ${home.location || home.neighbourhood || 'Private'}</p>
+      </div>
+      <div class="card-footer">
+        <button class="ghost-button" type="button">Open Home Profile</button>
+      </div>
+    `;
+    grid.append(card);
+    card.querySelector('button')?.addEventListener('click', () => openHomeInsights(home));
+  });
+
+  if (!grid.children.length) {
+    grid.append(createEmptyState('Link sellers to surface shared Home Profiles.'));
+  }
+
+  section.append(grid);
+  return section;
+}
+
+function renderAgentBillingView() {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'agent-billing';
+  const section = createSection({
+    title: 'Billing & Licenses',
+    description: 'Manage Agent · Pro seats and compliance documentation.',
+  });
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-body">
+      <p>Keep brokerage compliance up to date with one-click CRA/REC forms. Billing statements redact client identities by default.</p>
+      <ul class="feature-list">
+        <li>Seats active: 4 / 6</li>
+        <li>License uploads: BC / ON current</li>
+        <li>Next invoice: ${new Date().toLocaleDateString()}</li>
+      </ul>
+      <div class="form-actions">
+        <button class="ghost-button" type="button">Download latest invoice</button>
+      </div>
+    </div>
+  `;
+  section.append(card);
+  wrapper.append(section, renderSubscriptions());
+  return wrapper;
 }
 
 function renderMortgageExperience() {
@@ -3264,6 +3811,33 @@ function openShareModal(home, { mode } = {}) {
       btn.textContent = 'Copied!';
       setTimeout(() => { btn.textContent = 'Copy link'; }, 1600);
     }
+  });
+  modal.showModal();
+}
+
+function openAgentSegmentModal() {
+  modalTitle.textContent = 'Create buyer segment';
+  modalContent.innerHTML = `
+    <form class="form-grid" id="segment-form">
+      <label>Segment name
+        <input type="text" name="name" required placeholder="Downtown upsizers" />
+      </label>
+      <label>Target budget
+        <input type="text" name="budget" placeholder="$950k – $1.2M" />
+      </label>
+      <label>Focus areas
+        <textarea name="areas" rows="3" placeholder="False Creek, Port Moody, Kitsilano"></textarea>
+      </label>
+      <div class="form-actions">
+        <button class="ghost-button" type="button" id="cancel-segment">Cancel</button>
+        <button class="primary-button" type="submit">Save segment</button>
+      </div>
+    </form>
+  `;
+  modalContent.querySelector('#cancel-segment')?.addEventListener('click', () => modal.close());
+  modalContent.querySelector('#segment-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    modal.close();
   });
   modal.showModal();
 }

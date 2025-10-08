@@ -15,38 +15,32 @@
             crossorigin=""></script>
   </head>
   <body>
-    <header class="app-header">
-      <div class="brand">
-        <span class="logo">🏡</span>
-        <div>
-          <h1>Realestate Ready</h1>
-          <p class="tagline">Buyer-first matchmaking & analytics experience</p>
-        </div>
-      </div>
-      <nav class="header-nav">
-        <button class="nav-btn" data-target="landing">Overview</button>
-        <button class="nav-btn" data-target="auth">Onboarding</button>
-        <button class="nav-btn" data-target="messages">Messages</button>
-        <div class="role-switcher">
-          <label for="role-select">Role Experience</label>
-          <select id="role-select">
-            <option value="buyer">Buyer</option>
-            <option value="seller">Seller</option>
-            <option value="agent">Realtor / Agent</option>
-            <option value="mortgage">Mortgage Agent</option>
-          </select>
-        </div>
-        <button class="nav-btn notification-btn" onclick="showNotificationCenter()">
-          🔔 Notifications
-          <span id="notification-badge" class="notification-badge" style="display: none;"></span>
-        </button>
-        <button class="nav-btn" data-target="subscription">Subscriptions</button>
-        <button class="nav-btn" onclick="showNotificationSettings()">⚙️ Settings</button>
-        <div id="auth-actions" class="auth-actions"></div>
-      </nav>
-    </header>
+    <div class="app-shell">
+      <aside id="sidebar-container" class="sidebar" aria-label="Primary"></aside>
+      <div class="app-content">
+        <header class="app-header">
+          <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+            <span aria-hidden="true">☰</span>
+          </button>
+          <div class="brand">
+            <span class="logo">🏡</span>
+            <div>
+              <h1>Realestate Ready</h1>
+              <p class="tagline">Buyer-first matchmaking & analytics experience</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button id="global-new-button" class="primary-button" type="button">New Wishlist</button>
+            <button class="ghost-button notification-btn" type="button" onclick="showNotificationCenter()" aria-haspopup="dialog">
+              🔔 Notifications
+              <span id="notification-badge" class="notification-badge" style="display: none;"></span>
+            </button>
+            <button class="ghost-button" type="button" onclick="showNotificationSettings()" aria-label="Notification settings">⚙️</button>
+            <div id="auth-actions" class="auth-actions"></div>
+          </div>
+        </header>
 
-    <main id="app-root" class="app-root">
+        <main id="app-root" class="app-root">
       <div id="loading-indicator" style="padding: 2rem; text-align: center;">
         <h2>Loading Buyer Registry...</h2>
         <p>If this message persists, please check the browser console for errors.</p>
@@ -134,18 +128,21 @@
       </article>
     </template>
 
-    <dialog id="modal" class="modal">
-      <form method="dialog" class="modal-container">
-        <header class="modal-header">
-          <h2 id="modal-title"></h2>
-          <button type="submit" class="ghost-button close-modal">Close</button>
-        </header>
-        <div id="modal-content" class="modal-content"></div>
-      </form>
-    </dialog>
+        <dialog id="modal" class="modal">
+          <form method="dialog" class="modal-container">
+            <header class="modal-header">
+              <h2 id="modal-title"></h2>
+              <button type="submit" class="ghost-button close-modal">Close</button>
+            </header>
+            <div id="modal-content" class="modal-content"></div>
+          </form>
+        </dialog>
+      </div>
+    </div>
+    <div id="sidebar-overlay" class="sidebar-overlay" hidden></div>
 
-  <script type="module" src="auth.js"></script>
-  <script type="module" src="app.js"></script>
+    <script type="module" src="auth.js"></script>
+    <script type="module" src="app.js"></script>
     
     <!-- Fallback test script -->
     <script>
