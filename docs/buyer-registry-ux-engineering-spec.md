@@ -116,6 +116,15 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 - Hover reveals counts: `Matched {N} home profiles` for buyers; `{N} buyers searching here` for sellers.
 - Tooltips avoid street-level precision; data is aggregated to neighbourhood blocks.
 
+### 3.1 Neighbourhood data strategy
+- Implement a three-layer hierarchy of neighbourhood sources to balance accuracy, coverage, and licensing:
+  1. **Layer A – Municipal open data**: ingest official neighbourhood/local area polygons from cities that publish open data (e.g., City of Toronto, City of Vancouver, Montréal). These names feed autosuggest options and polygon pickers for the most precise experience.
+  2. **Layer B – OpenStreetMap**: supplement municipal coverage with OSM `place=neighbourhood` features and `boundary=place` polygons. Label these as "community-named areas" in the UI to set expectations about variability and allow buyers to draw custom polygons when needed.
+  3. **Layer C – Commercial datasets (optional)**: layer in Mapbox Boundaries tiles plus neighbourhood labels from Mapbox Streets or Google Places API when municipal/OSM data is sparse. Treat these as label hints rather than authoritative polygons.
+- Store canonical areas in a shared table with fields `id`, `name`, `alt_names`, `source`, `geom`, and `license`. Back this data with Elasticsearch/geo indexes to support `/areas/suggest?q=` and `/areas/{id}` endpoints.
+- Keep Azure Maps as the base map provider and render neighbourhood polygons as custom vector layers on top of it.
+- Exclude MLS® board proprietary areas/districts unless explicit licensing is obtained; they must not appear in search or analytics.
+
 ## 4. Access & Gating Rules
 - Central guard middleware checks both role and subscription tier before returning protected data or enabling messaging actions.
 - UI surfaces gating with disabled buttons and contextual tooltips (`Upgrade to contact buyers`).
