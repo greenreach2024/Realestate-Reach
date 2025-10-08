@@ -23,6 +23,17 @@ The prototype is built with vanilla HTML, CSS, and JavaScript (ES modules). No b
 3. Use the navigation bar to explore landing content, onboarding flows, notifications, subscription plans, and each persona’s workspace.
 4. Interact with wishlist cards, Home Profile insights, lead cards, and modal forms to experience the demand-led workflows described in the specification.
 
+### Market trends prototype service
+
+The repository includes a lightweight `/market-trends` API mock to demonstrate how Tier 1 data sources (CREA, Teranet–NB HPI, StatCan, CMHC) are prioritised. To run it locally:
+
+1. From the repository root, start the service with `node api/server.js` (no build step required).
+2. Query the endpoint, providing a `geoCode` and optional `propertyType` query parameter, for example:
+   ```bash
+   curl "http://localhost:3000/market-trends?geoCode=board:REBGV&propertyType=detached"
+   ```
+3. The response includes the selected benchmark price, YoY change, trend series, disclosures, and the `x-source` header denoting the active provider.
+
 ### Demo preview
 
 Screenshots and GIFs of the prototype will live in the `docs/media/` directory. Add them as you iterate to make stakeholder demos easier.
