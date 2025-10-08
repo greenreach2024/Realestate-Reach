@@ -486,6 +486,13 @@ body {
   color: #b91c1c;
 }
 
+.tooltip-icon {
+  font-size: 0.85em;
+  margin-left: 0.25rem;
+  cursor: help;
+  color: var(--color-muted-text, #6b7280);
+}
+
 .chip--new {
   background: rgba(59, 130, 246, 0.15);
   color: #1d4ed8;

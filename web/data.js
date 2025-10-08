@@ -51,7 +51,7 @@ export const buyers = [
         },
         analytics: {
           supplyCount: 9,
-          gap: 'Most Property Profiles here include 1.5 baths; you need 2.',
+          gap: 'Most Home Profiles here include 1.5 baths; you need 2.',
           trend: 'Demand spike in Olympic Village up 7% this week.',
         },
       },
@@ -61,7 +61,7 @@ export const buyers = [
         id: 'thread-31',
         counterparty: 'Seller · Evergreen Terrace',
         wishlistId: 'wishlist-1',
-        preview: 'We are prepping a Property Profile that hits 90% of your wishlist. Want anonymised specs?',
+        preview: 'We are prepping a Home Profile that hits 90% of your wishlist. Want anonymised specs?',
         status: 'Reply ready',
         disclosureRequested: false,
       },
@@ -75,7 +75,7 @@ export const buyers = [
       },
     ],
     notifications: [
-      { id: 'note-1', type: 'match', message: 'New Property Profile matches Port Moody Family Haven at 91%.' },
+      { id: 'note-1', type: 'match', message: 'New Home Profile matches Port Moody Family Haven at 91%.' },
       { id: 'note-2', type: 'trend', message: 'Demand in Olympic Village is trending +7% week over week.' },
     ],
   },
@@ -89,13 +89,13 @@ export const buyerMapRegions = [
   { id: 'region-4', label: 'Coal Harbour', count: 4, lat: 49.2917, lng: -123.1239, x: 72, y: 22 },
 ];
 
-export const propertyProfiles = [
+export const homeProfiles = [
   {
-    id: 'property-1',
+    id: 'home-1',
     nickname: 'Evergreen Terrace Home',
     address: '123 Evergreen Terrace, Port Moody, BC',
-    status: 'Active',
-    askingPrice: 985000,
+    status: 'Open to offers',
+    priceExpectation: 985000,
     location: 'Port Moody (approx.)',
     lat: 49.289,
     lng: -122.84,
@@ -130,7 +130,7 @@ export const propertyProfiles = [
     },
     buyerMatches: [
       {
-        id: 'property-1-match-1',
+        id: 'home-1-match-1',
         alias: 'Taylor K.',
         maskedAlias: 'Buyer · 4821',
         matchPercent: 92,
@@ -152,7 +152,7 @@ export const propertyProfiles = [
         summary: 'Hits EV-ready parking and home office requirements; lacks secondary suite for income flexibility.',
       },
       {
-        id: 'property-1-match-2',
+        id: 'home-1-match-2',
         alias: 'Jordan & Priya',
         maskedAlias: 'Buyer household · 7359',
         matchPercent: 88,
@@ -173,7 +173,7 @@ export const propertyProfiles = [
         summary: 'Fully meets must-haves; fast movers looking to close this quarter.',
       },
       {
-        id: 'property-1-match-3',
+        id: 'home-1-match-3',
         alias: 'Buyer · Partnered Agent',
         maskedAlias: 'Buyer · 1864',
         matchPercent: 81,
@@ -194,7 +194,7 @@ export const propertyProfiles = [
         summary: 'Location perfect. Buyer will upgrade match by finishing basement or offering flex space.',
       },
       {
-        id: 'property-1-match-4',
+        id: 'home-1-match-4',
         alias: 'Alex (Relocating)',
         maskedAlias: 'Buyer · 9044',
         matchPercent: 76,
@@ -219,31 +219,31 @@ export const propertyProfiles = [
       {
         feature: '3+ bedrooms',
         requiredPercent: 0.96,
-        propertyHas: true,
+        homeHas: true,
         insight: 'Meets almost every matched buyer. Highlight bedroom sizes in the media set.',
       },
       {
         feature: 'Dedicated office',
         requiredPercent: 0.68,
-        propertyHas: true,
+        homeHas: true,
         insight: 'Remote-work buyers cite this as a differentiator. Showcase the office staging.',
       },
       {
         feature: 'Secondary suite',
         requiredPercent: 0.41,
-        propertyHas: false,
+        homeHas: false,
         insight: 'Consider outlining potential layout for suite conversion to capture income-seeker segment.',
       },
       {
         feature: 'EV charging',
         requiredPercent: 0.54,
-        propertyHas: true,
+        homeHas: true,
         insight: 'Charging-ready garage satisfies most electrified buyer wishlists.',
       },
       {
         feature: 'Walkable to schools',
         requiredPercent: 0.37,
-        propertyHas: true,
+        homeHas: true,
         insight: 'School proximity messaging resonates with family buyers in backlog.',
       },
     ],
@@ -281,11 +281,11 @@ export const propertyProfiles = [
     access: 'free',
   },
   {
-    id: 'property-2',
+    id: 'home-2',
     nickname: 'Seawalk Condo (Private)',
     address: '88 Creekside Quay, Vancouver, BC',
-    status: 'Off-market preview',
-    askingPrice: 915000,
+    status: 'Not for sale',
+    priceExpectation: 915000,
     location: 'False Creek (approx.)',
     summary: 'South-facing condo with marina view, concierge, and EV parking ready.',
     heroImage:
@@ -320,25 +320,25 @@ export const propertyProfiles = [
       {
         feature: 'Water view',
         requiredPercent: 0.72,
-        propertyHas: true,
+        homeHas: true,
         insight: 'Showcase panoramic views to maximise perceived alignment.',
       },
       {
         feature: 'Secure parking',
         requiredPercent: 0.64,
-        propertyHas: true,
+        homeHas: true,
         insight: 'One stall hits most wishlists; second stall upgrade could add reach.',
       },
       {
         feature: 'Concierge',
         requiredPercent: 0.38,
-        propertyHas: true,
+        homeHas: true,
         insight: 'Concierge services resonate with lock-and-leave buyers.',
       },
       {
         feature: 'Guest suite',
         requiredPercent: 0.41,
-        propertyHas: false,
+        homeHas: false,
         insight: 'Consider partner amenities to satisfy guest stay expectations.',
       },
     ],
@@ -501,8 +501,8 @@ export const mortgageLeads = [
 ];
 
 export const notifications = [
-  { role: 'Buyer', trigger: 'New Property Profile matches wishlist', channels: ['Push', 'Email'] },
-  { role: 'Seller', trigger: 'High-intent buyer matched Property Profile', channels: ['In-app', 'Email'] },
+  { role: 'Buyer', trigger: 'New Home Profile matches wishlist', channels: ['Push', 'Email'] },
+  { role: 'Seller', trigger: 'High-intent buyer matched Home Profile', channels: ['In-app', 'Email'] },
   { role: 'Agent', trigger: 'Demand spike in subscribed area', channels: ['Email digest'] },
   { role: 'Mortgage Agent', trigger: 'Buyer requests financing outreach', channels: ['SMS', 'Email'] },
 ];
@@ -522,7 +522,7 @@ export const subscriptions = [
     name: 'Seller · Free',
     price: '$0',
     features: [
-      'Property Profile storage',
+      'Home Profile storage',
       'Match counts & score bands',
       'Gap hints & upgrade prompts',
       'Geo heatmap preview',
@@ -535,7 +535,7 @@ export const subscriptions = [
       'Buyer wishlist snippets (anonymised)',
       'Direct in-app messaging',
       'Demand trend analytics',
-      'Export & compare Property Profiles',
+      'Export & compare Home Profiles',
     ],
   },
   {
@@ -543,7 +543,7 @@ export const subscriptions = [
     price: '$149 / month',
     features: [
       'Regional heatmaps',
-      'Multi-property matchmaking',
+      'Multi-home matchmaking',
       'Buyer pipeline analytics',
       'Team collaboration seats',
     ],
@@ -568,7 +568,7 @@ export const onboardingFlows = {
     { title: 'Privacy controls', description: 'Choose visibility for mortgage agents and communication preferences.' },
   ],
   seller: [
-    { title: 'Property basics', description: 'Approximate address, property type, bed/bath counts, and pricing.' },
+    { title: 'Home basics', description: 'Approximate address, home type, bed/bath counts, and pricing.' },
     { title: 'Feature tagging', description: 'Highlight amenities like EV charging, rental suites, and accessibility.' },
     { title: 'Upgrade preview', description: 'Review buyer demand analytics before choosing Seller Pro.' },
   ],

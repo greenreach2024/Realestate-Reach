@@ -1,7 +1,7 @@
 import {
   buyers,
   buyerMapRegions,
-  propertyProfiles,
+  homeProfiles,
   sellerHotspots,
   agents,
   mortgageLeads,
@@ -32,8 +32,8 @@ function canMessage() {
   return (state.role === 'seller' || state.role === 'agent') && (state.sellerTier === 'pro');
 }
 
-// Lightweight adapter (mock). Replace with /api/matches/property/:id/summary later.
-function getPropertyMatchSummary(profile) {
+// Lightweight adapter (mock). Replace with /api/matches/home/:id/summary later.
+function getHomeMatchSummary(profile) {
   if (!profile) {
     return { matches: 0, topScore: 0, gaps: [], snippet: '' };
   }
@@ -166,7 +166,7 @@ window.authComplete = (role) => {
 function renderMessenger() {
   const section = createSection({
     title: 'In-app messages',
-    description: 'Anonymized conversations aligned to buyer wishlists and property profiles. The system publishes demand, not supply.',
+    description: 'Anonymized conversations aligned to buyer wishlists and Home Profiles. The system publishes demand, not supply.',
   });
 
   const s = auth.state;
@@ -271,7 +271,7 @@ function renderLanding() {
   const section = createSection({
     title: 'Demand-led matchmaking for Realestate Ready',
     description:
-      'Realestate Ready is not an MLS or property listing site. Buyers publish wishlists; sellers and agents compare private property profiles against demand. The platform publishes demand, not supply.',
+      'Realestate Ready is not an MLS or listing site. Buyers publish wishlists; sellers and agents compare private Home Profiles against demand. The platform publishes demand, not supply.',
   });
 
   const hero = document.createElement('div');
@@ -279,7 +279,7 @@ function renderLanding() {
   hero.innerHTML = `
     <div>
       <h2>Match private supply to visible buyer demand</h2>
-      <p>Buyer Wishlists surface true demand. Sellers analyse how their Property Profiles stack up, upgrade for outreach, and keep every conversation anonymised until disclosure.</p>
+      <p>Buyer Wishlists surface true demand. Sellers analyse how their Home Profiles stack up, upgrade for outreach, and keep every conversation anonymised until disclosure.</p>
       <div class="pill-group">
         <span class="pill">Buyer Wishlists</span>
         <span class="pill">Match scoring</span>
@@ -302,7 +302,7 @@ function renderLanding() {
     },
     {
       title: 'Private supply intelligence',
-      body: 'Sellers and agents benchmark Property Profiles for AI-driven comparisons—no homes are listed for sale.',
+      body: 'Sellers and agents benchmark Home Profiles for AI-driven comparisons—no homes are listed for sale.',
     },
     {
       title: 'Compliance by design',
@@ -428,9 +428,9 @@ function renderBuyerExperience() {
   section.append(
     renderMapCard({
       title: 'Search areas',
-      description: 'Hover to see how many Property Profiles currently match in each focus area.',
+      description: 'Hover to see how many Home Profiles currently match in each focus area.',
       regions: buyerMapRegions,
-      formatter: (region) => `Matched ${region.count} Property Profiles`,
+      formatter: (region) => `Matched ${region.count} Home Profiles`,
       emptyCopy: 'Add areas to your wishlists to populate this demand map.',
     }),
   );
@@ -481,7 +481,7 @@ function renderBuyerWishlistCard(buyer, wishlist) {
 
   const statusBadge = node.querySelector('.wishlist-status');
   statusBadge.textContent = wishlist.active
-    ? `Matched ${wishlist.matchedProfiles} Property Profiles`
+    ? `Matched ${wishlist.matchedProfiles} Home Profiles`
     : 'Archived wishlist';
 
   const details = node.querySelector('.wishlist-details');
@@ -491,7 +491,7 @@ function renderBuyerWishlistCard(buyer, wishlist) {
       <dd>${formatCurrency(wishlist.budget.min)} - ${formatCurrency(wishlist.budget.max)}</dd>
     </div>
     <div>
-      <dt>Property type</dt>
+      <dt>Home type</dt>
       <dd>${wishlist.details.type}</dd>
     </div>
     <div>
@@ -570,7 +570,7 @@ function renderBuyerInsights(buyer) {
     card.className = 'analytics-card';
     card.innerHTML = `
       <h3>${wishlist.name}</h3>
-      <p><strong>Supply vs Me:</strong> ${wishlist.analytics.supplyCount} Property Profiles · ${wishlist.matchRange}</p>
+      <p><strong>Supply vs Me:</strong> ${wishlist.analytics.supplyCount} Home Profiles · ${wishlist.matchRange}</p>
       <p>${wishlist.analytics.gap}</p>
       <p>${wishlist.analytics.trend}</p>
     `;
@@ -678,25 +678,31 @@ function renderBuyerNotifications(buyer) {
 
 function renderSellerExperience() {
   const container = document.createElement('div');
-  container.className = 'property-profile';
+  container.className = 'property-profile home-profile';
 
-  const home = (propertyProfiles || [])[0];
+  const headerSection = createSection({
+    title: 'My Homes',
+    description: 'See how buyer demand aligns with each Home Profile and keep outreach private until you decide otherwise.',
+  });
+  container.append(headerSection);
+
+  const home = (homeProfiles || [])[0];
 
   if (!home) {
     const emptySection = createSection({
-      title: 'Property profile (v2)',
-      description: 'Add your property to unlock buyer demand analytics and match-based messaging.',
+      title: 'Home Profile (v2)',
+      description: 'Add your home to see real buyer demand. Activating a profile keeps your address private.',
     });
     const emptyBody = document.createElement('div');
     emptyBody.className = 'card-body';
-    emptyBody.append(createEmptyState('No property profile yet — add address, specs, and key features to surface matching buyers.'));
+    emptyBody.append(createEmptyState('Add your home to see how many buyers want a place like yours. This does not list your home for sale.'));
     emptySection.append(emptyBody);
     container.append(emptySection);
     return container;
   }
 
   container.append(
-    renderPropertyHero(home),
+    renderHomeHero(home),
     renderDemandSnapshotSection(home),
     renderWishlistFitSection(home),
     renderBuyerMatchesSection(home),
@@ -709,9 +715,27 @@ function renderSellerExperience() {
   return container;
 }
 
-function renderPropertyHero(home) {
+function formatHomeArea(home) {
+  if (!home) return 'your area';
+  if (home.location) {
+    const sanitized = home.location.replace(/\s*\(approx\.\)\s*/i, '').trim();
+    if (sanitized) return sanitized;
+  }
+  if (typeof home.address === 'string') {
+    const parts = home.address.split(',').map((part) => part.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      return parts.slice(1).join(', ');
+    }
+  }
+  return 'your area';
+}
+
+function renderHomeHero(home) {
   const section = document.createElement('section');
   section.className = 'section property-hero';
+
+  const area = formatHomeArea(home);
+  const privacyLine = home?.address ? `Street withheld · ${area}` : area;
 
   const details = document.createElement('div');
   details.className = 'property-hero__details';
@@ -720,21 +744,26 @@ function renderPropertyHero(home) {
   header.className = 'property-hero__header';
   const headerText = document.createElement('div');
   headerText.innerHTML = `
-    <p class="eyebrow">Property profile · seller view</p>
-    <h2>${home.nickname || 'Property profile'}</h2>
-    <p class="section-description">${home.address || home.location || 'Location withheld for privacy'}</p>
+    <p class="eyebrow">Home Profile · Seller view</p>
+    <h2>Your home at ${area}</h2>
+    <p class="section-description">Private by default. Shown to buyers only when you choose.</p>
+    <p class="section-description">${privacyLine}</p>
   `;
   const statusBadge = document.createElement('span');
   statusBadge.className = `status-badge ${formatStatusClass(home.status)}`;
-  statusBadge.textContent = home.status || 'Status unavailable';
+  statusBadge.textContent = home.status || 'Home status unavailable';
   header.append(headerText, statusBadge);
   details.append(header);
 
   const topline = document.createElement('div');
   topline.className = 'property-hero__topline';
   topline.append(
-    renderHeroMetric('Asking price', formatCurrency(home.askingPrice)),
-    renderHeroMetric('Top match', formatPercent(home?.demandSnapshot?.topMatch ?? home.matchScore, 0)),
+    renderHeroMetric(
+      'Price expectation',
+      formatCurrency(home.priceExpectation),
+      'Used only to match buyer budgets; not a public list price.',
+    ),
+    renderHeroMetric('Top match %', formatPercent(home?.demandSnapshot?.topMatch ?? home.matchScore, 0)),
     renderHeroMetric('Matching buyers', `${home?.demandSnapshot?.matchCount ?? home.matchedBuyers ?? 0}`),
   );
   details.append(topline);
@@ -749,12 +778,10 @@ function renderPropertyHero(home) {
   const specsList = document.createElement('dl');
   specsList.className = 'hero-specs';
   const specs = [
-    { label: 'Type', value: home.specs?.type || home.type || '—' },
-    { label: 'Beds', value: Number.isFinite(home.specs?.beds) ? `${home.specs.beds} bd` : '—' },
-    { label: 'Baths', value: Number.isFinite(home.specs?.baths) ? `${home.specs.baths} ba` : '—' },
-    { label: 'Size', value: home.specs?.size || '—' },
-    { label: 'Parking', value: home.specs?.parking || '—' },
-    { label: 'Built', value: home.specs?.built || '—' },
+    { label: 'Home type', value: home.specs?.type || home.type || '—' },
+    { label: 'Beds', value: Number.isFinite(home.specs?.beds) ? `${home.specs.beds}` : '—' },
+    { label: 'Baths', value: Number.isFinite(home.specs?.baths) ? `${home.specs.baths}` : '—' },
+    { label: 'Living area', value: home.specs?.size || '—' },
   ];
   specs.forEach(({ label, value }) => {
     const block = document.createElement('div');
@@ -768,33 +795,43 @@ function renderPropertyHero(home) {
   const editButton = document.createElement('button');
   editButton.className = 'ghost-button';
   editButton.type = 'button';
-  editButton.textContent = 'Edit listing';
+  editButton.textContent = 'Edit home details';
   const shareButton = document.createElement('button');
   shareButton.className = 'ghost-button';
   shareButton.type = 'button';
-  shareButton.textContent = 'Share to agent';
+  shareButton.textContent = canSeeSnippets()
+    ? 'Share demand snapshot (no address)'
+    : 'Upgrade to share demand snapshot';
   const messageButton = document.createElement('button');
   messageButton.className = 'primary-button';
   messageButton.type = 'button';
-  messageButton.textContent = canMessage() ? 'Message matched buyers' : 'Upgrade to contact matched buyers';
+  messageButton.textContent = canMessage()
+    ? 'Message matched buyers (Pro)'
+    : 'Upgrade to message buyers';
   actions.append(editButton, shareButton, messageButton);
   details.append(actions);
 
-  editButton.addEventListener('click', () => openEditListingModal(home));
-  shareButton.addEventListener('click', () => openShareModal(home));
+  editButton.addEventListener('click', () => openEditHomeModal(home));
+  shareButton.addEventListener('click', () => {
+    if (!canSeeSnippets()) {
+      openUpgradePrompt();
+      return;
+    }
+    openShareModal(home, { mode: 'snapshot' });
+  });
   messageButton.addEventListener('click', () => {
     if (!canMessage()) {
       openUpgradePrompt();
       return;
     }
-    openChat(`property-${home.id}`, 'Matched buyers');
+    openChat(home.id, 'Matched buyers');
   });
 
   const media = document.createElement('figure');
   media.className = 'property-hero__media';
   const img = document.createElement('img');
   img.src = home.heroImage || 'https://images.unsplash.com/photo-1505691723518-36a5ac3be353?auto=format&fit=crop&w=1200&q=80';
-  img.alt = `${home.nickname || 'Property'} primary photo`;
+  img.alt = `${home.nickname || 'Home'} primary photo`;
   img.loading = 'lazy';
   media.append(img);
 
@@ -808,12 +845,15 @@ function formatStatusClass(status) {
   return `status-badge--${normalised || 'unknown'}`;
 }
 
-function renderHeroMetric(label, value) {
+function renderHeroMetric(label, value, tooltip) {
   const metric = document.createElement('div');
   metric.className = 'hero-metric';
+  const tooltipMarkup = tooltip
+    ? ` <span class="tooltip-icon" title="${tooltip}">ⓘ</span>`
+    : '';
   metric.innerHTML = `
     <h3>${value ?? '—'}</h3>
-    <p class="section-description">${label}</p>
+    <p class="section-description">${label}${tooltipMarkup}</p>
   `;
   return metric;
 }
@@ -821,11 +861,19 @@ function renderHeroMetric(label, value) {
 function renderDemandSnapshotSection(home) {
   const section = document.createElement('section');
   section.className = 'section demand-snapshot';
+
+  const snapshot = home.demandSnapshot || {};
+  const matchCount = snapshot.matchCount ?? home.matchedBuyers ?? 0;
+  const topMatch = formatPercent(snapshot.topMatch ?? home.matchScore, 0);
+  const preapprovedCount = snapshot.preapprovedCount ?? 0;
+  const newSince = snapshot.newSince ?? 0;
+
   section.innerHTML = `
     <div class="section-header">
       <div>
         <h2>Demand snapshot</h2>
-        <p class="section-description">Server-rendered KPIs refreshed when matches update.</p>
+        <p class="section-description">Your home currently matches ${matchCount} buyers.</p>
+        <p class="section-description">Top match: ${topMatch} · Pre-approved: ${preapprovedCount} buyers · New this week: ${newSince}</p>
       </div>
     </div>
   `;
@@ -833,22 +881,21 @@ function renderDemandSnapshotSection(home) {
   const ribbon = document.createElement('div');
   ribbon.className = 'upgrade-ribbon';
   ribbon.innerHTML = `
-    <span>Unlock buyer profiles & secure chat</span>
+    <span>Unlock buyer profiles and secure chat. Your address stays private.</span>
     <button class="primary-button" type="button">Upgrade</button>
   `;
   ribbon.querySelector('button').addEventListener('click', () => openUpgradePrompt());
   section.querySelector('.section-header')?.append(ribbon);
 
-  const snapshot = home.demandSnapshot || {};
   const grid = document.createElement('div');
   grid.className = 'kpi-grid';
   grid.append(
-    renderKpiTile('Matching buyers', snapshot.matchCount ?? home.matchedBuyers ?? 0),
-    renderKpiTile('Top match', formatPercent(snapshot.topMatch ?? home.matchScore, 0)),
-    renderKpiTile('Pre-approved buyers', snapshot.preapprovedCount ?? 0),
-    renderKpiTile('New in last 7 days', snapshot.newSince ?? 0, { subtext: 'Auto-refreshes nightly' }),
+    renderKpiTile('Matching Buyers', matchCount),
+    renderKpiTile('Top Match %', topMatch),
+    renderKpiTile('Pre-approved Buyers', preapprovedCount),
+    renderKpiTile('New this week', newSince, { subtext: 'Auto-refreshes nightly' }),
   );
-  section.append(grid, createInfoBanner('Snapshot updates within 10 seconds of saving listing changes.'));
+  section.append(grid, createInfoBanner('Snapshot updates within 10 seconds of saving Home Profile changes.'));
   return section;
 }
 
@@ -869,8 +916,8 @@ function renderWishlistFitSection(home) {
   section.innerHTML = `
     <div class="section-header">
       <div>
-        <h2>Wishlist fit</h2>
-        <p class="section-description">Breakdown of how this property scores across weighted buyer requirements.</p>
+        <h2>Why your home fits buyer wishlists</h2>
+        <p class="section-description">See how location, price expectation, and features power the match score.</p>
       </div>
     </div>
   `;
@@ -880,11 +927,11 @@ function renderWishlistFitSection(home) {
   grid.className = 'wishlist-fit__grid';
   grid.append(
     createFitBar('Location fit (highest weight)', fit.location),
-    createFitBar('Price fit (gate)', fit.price, 'If the listing price exceeds a buyer’s max budget the match score is 0.'),
+    createFitBar('Price fit (gate)', fit.price, 'If your price expectation is above a buyer’s max budget, their match score becomes 0.'),
     createFitBar('Must-haves covered', fit.mustHave, `${formatPercent(fit.mustHave, 0)} of required features met.`),
     createFitBar('Nice-to-haves covered', fit.niceToHave, `${formatPercent(fit.niceToHave, 0)} of optional features hit.`),
   );
-  section.append(grid, createInfoBanner('Match score = (Location × %location) + (Feature × %feature) + (Lifestyle × %amenity). Price is a gate.', 'muted'));
+  section.append(grid, createInfoBanner('Matching logic: location carries the most weight; price is a gate; features fine-tune the score.', 'muted'));
   return section;
 }
 
@@ -912,7 +959,7 @@ function renderBuyerMatchesSection(home) {
     <div class="section-header">
       <div>
         <h2>Buyer matches</h2>
-        <p class="section-description">Sorted by match score. Open a row to see why the match scored that way.</p>
+        <p class="section-description">Review who fits your home. Open a row to understand match factors.</p>
       </div>
     </div>
   `;
@@ -923,7 +970,7 @@ function renderBuyerMatchesSection(home) {
 
   const matches = Array.isArray(home.buyerMatches) ? home.buyerMatches : [];
   if (!matches.length) {
-    section.append(createEmptyState('We’re tracking buyers in your area. Matches will appear as new wishlists align to this property.'));
+    section.append(createEmptyState('We’re tracking buyers in your area. Matches will appear as new wishlists align to this home.'));
     return section;
   }
 
@@ -932,13 +979,12 @@ function renderBuyerMatchesSection(home) {
   table.innerHTML = `
     <thead>
       <tr>
-        <th scope="col">Buyer</th>
+        <th scope="col">Buyer alias</th>
         <th scope="col">Match %</th>
         <th scope="col">Mortgage</th>
-        <th scope="col">Budget vs price</th>
+        <th scope="col">Budget fit</th>
         <th scope="col">Timeline</th>
-        <th scope="col">Location overlap</th>
-        <th scope="col">Must-haves</th>
+        <th scope="col">Must-have status</th>
         <th scope="col" class="align-right">Action</th>
       </tr>
     </thead>
@@ -949,20 +995,21 @@ function renderBuyerMatchesSection(home) {
     const row = document.createElement('tr');
     row.className = 'match-row';
     const matchClass = match.matchPercent >= 85 ? 'chip--high' : match.matchPercent >= 70 ? 'chip--mid' : 'chip--low';
+    const locationLine = match.locationTag ? `<p class="section-description">${match.locationTag}</p>` : '';
     row.innerHTML = `
       <td>
         <div class="match-alias">
           <span>${alias}</span>
           ${match.isNew ? '<span class="chip chip--new">New</span>' : ''}
         </div>
+        ${locationLine}
       </td>
       <td><span class="chip ${matchClass}">${formatPercent(match.matchPercent, 0)}</span></td>
       <td><span class="status-dot ${match.preApproved ? 'status-dot--success' : 'status-dot--pending'}">${match.preApproved ? 'Pre-approved' : 'Not yet'}</span></td>
-      <td>${describeBudgetAlignment(match, home.askingPrice)}</td>
+      <td>${describeBudgetAlignment(match, home.priceExpectation)}</td>
       <td>${match.timeline || '—'}</td>
-      <td>${match.locationTag || home.location || '—'}</td>
       <td>${summarizeMustHaveStatus(match)}</td>
-      <td class="align-right"><button class="ghost-button match-cta" type="button">${canMessage() ? 'Message' : 'Unlock messaging'}</button></td>
+      <td class="align-right"><button class="ghost-button match-cta" type="button">${canMessage() ? 'Message buyer' : 'Unlock messaging'}</button></td>
     `;
 
     const detailRow = document.createElement('tr');
@@ -1003,7 +1050,7 @@ function renderBuyerMatchesSection(home) {
       detailContent = '<div class="locked-message">Upgrade to Seller · Pro to view factor-level breakdowns and buyer context.</div>';
     }
 
-    detailRow.innerHTML = `<td colspan="8">${detailContent}</td>`;
+    detailRow.innerHTML = `<td colspan="7">${detailContent}</td>`;
 
     const ctaButton = row.querySelector('.match-cta');
     ctaButton.addEventListener('click', (event) => {
@@ -1011,7 +1058,7 @@ function renderBuyerMatchesSection(home) {
       if (!canMessage()) {
         openUpgradePrompt();
       } else {
-        openChat(`property-${home.id}-${match.id}`, alias);
+        openChat(`${home.id}-${match.id}`, alias);
       }
     });
 
@@ -1025,17 +1072,20 @@ function renderBuyerMatchesSection(home) {
   });
   table.append(tbody);
   section.append(table);
+  const footerNote = document.createElement('p');
+  footerNote.className = 'section-description';
+  footerNote.textContent = 'Messaging is in-app and private; you decide what to share.';
+  section.append(footerNote);
   return section;
 }
-
 function renderFeatureFitSection(home) {
   const section = document.createElement('section');
   section.className = 'section feature-fit';
   section.innerHTML = `
     <div class="section-header">
       <div>
-        <h2>Feature-fit matrix</h2>
-        <p class="section-description">Aggregated from matched buyer must-haves to surface upgrade guidance.</p>
+        <h2>What buyers like about your home</h2>
+        <p class="section-description">Based on matched buyer must-haves; highlight strengths and address gaps.</p>
       </div>
     </div>
   `;
@@ -1050,16 +1100,22 @@ function renderFeatureFitSection(home) {
     features.forEach((item) => {
       const card = document.createElement('article');
       card.className = 'feature-card';
-      if (!item.propertyHas) {
+      if (!item.homeHas) {
         card.classList.add('feature-card--gap');
       }
+      const requirePercent = formatPercent(item.requiredPercent ?? 0, 0);
+      const insight = item.insight || '';
+      const statusLine = item.homeHas
+        ? 'Your home: ✓'
+        : `Your home: ✗${insight ? ` (${insight})` : ''}`;
+      const description = item.homeHas && insight ? `<p class="section-description">${insight}</p>` : '';
       card.innerHTML = `
         <header>
           <h3>${item.feature}</h3>
-          <span class="chip ${item.propertyHas ? 'chip--high' : 'chip--warning'}">${formatPercent(item.requiredPercent ?? 0, 0)} require</span>
+          <span class="chip ${item.homeHas ? 'chip--high' : 'chip--warning'}">${requirePercent} of matched buyers require</span>
         </header>
-        <p class="section-description">${item.insight || 'Insight pending recalculation.'}</p>
-        <p class="feature-card__status">${item.propertyHas ? 'This listing: ✓' : 'This listing: ✗'}</p>
+        ${description}
+        <p class="feature-card__status">${statusLine}</p>
       `;
       matrix.append(card);
     });
@@ -1075,8 +1131,8 @@ function renderPricePositioningSection(home) {
   section.innerHTML = `
     <div class="section-header">
       <div>
-        <h2>Price positioning vs buyer budgets</h2>
-        <p class="section-description">Distribution of matched buyers by maximum budget with asking price overlay.</p>
+        <h2>Where your price expectation sits vs buyer budgets</h2>
+        <p class="section-description">Distribution of matched buyers by maximum budget with your expectation overlay.</p>
       </div>
     </div>
   `;
@@ -1086,7 +1142,7 @@ function renderPricePositioningSection(home) {
   histogram.className = 'price-histogram';
 
   if (!buckets.length) {
-    const empty = createEmptyState('Budget histogram appears once buyers match this property.');
+    const empty = createEmptyState('Budget histogram appears once buyers match this home.');
     empty.classList.add('histogram-empty');
     histogram.append(empty);
   } else {
@@ -1106,13 +1162,13 @@ function renderPricePositioningSection(home) {
     const budgets = buckets
       .map((bucket) => bucket.maxBudget)
       .filter((value) => Number.isFinite(value));
-    const minBudget = budgets.length ? Math.min(...budgets, home.askingPrice || 0) : home.askingPrice || 0;
-    const maxBudget = budgets.length ? Math.max(...budgets, home.askingPrice || 0) : home.askingPrice || 0;
-    const ratio = maxBudget === minBudget ? 0.5 : ((home.askingPrice || minBudget) - minBudget) / (maxBudget - minBudget);
+    const minBudget = budgets.length ? Math.min(...budgets, home.priceExpectation || 0) : home.priceExpectation || 0;
+    const maxBudget = budgets.length ? Math.max(...budgets, home.priceExpectation || 0) : home.priceExpectation || 0;
+    const ratio = maxBudget === minBudget ? 0.5 : ((home.priceExpectation || minBudget) - minBudget) / (maxBudget - minBudget);
     const marker = document.createElement('div');
     marker.className = 'price-histogram__marker';
     marker.style.left = `${Math.min(100, Math.max(0, ratio * 100))}%`;
-    marker.innerHTML = `<span>${formatCurrency(home.askingPrice)} asking</span>`;
+    marker.innerHTML = `<span>${formatCurrency(home.priceExpectation)} expectation</span>`;
     histogram.append(marker);
   }
 
@@ -1124,18 +1180,22 @@ function renderPricePositioningSection(home) {
   const heading = document.createElement('h3');
   heading.textContent = 'What-if simulation';
   whatIf.append(heading);
+  const intro = document.createElement('p');
+  intro.className = 'section-description';
+  intro.textContent = 'Try adjusting your price expectation to preview how buyer matches change (no changes saved).';
+  whatIf.append(intro);
 
   const priceRange = sim.priceRange || {};
   const slider = document.createElement('input');
   slider.type = 'range';
-  slider.min = `${priceRange.min ?? Math.round((home.askingPrice || 0) * 0.9)}`;
-  slider.max = `${priceRange.max ?? Math.round((home.askingPrice || 0) * 1.1)}`;
+  slider.min = `${priceRange.min ?? Math.round((home.priceExpectation || 0) * 0.9)}`;
+  slider.max = `${priceRange.max ?? Math.round((home.priceExpectation || 0) * 1.1)}`;
   slider.step = `${priceRange.step ?? 1000}`;
-  slider.value = `${home.askingPrice || slider.min}`;
+  slider.value = `${home.priceExpectation || slider.min}`;
 
   const sliderLabel = document.createElement('label');
   sliderLabel.className = 'what-if-panel__label';
-  sliderLabel.textContent = 'Adjust asking price (±10%)';
+  sliderLabel.textContent = 'Try adjusting your price expectation (preview only)';
   const sliderRow = document.createElement('div');
   sliderRow.className = 'what-if-panel__slider';
   sliderRow.append(slider);
@@ -1217,7 +1277,7 @@ function projectSimulationOutcome(home, price, selectedToggles = []) {
   const sim = home.simulation || {};
   const baseMatches = sim.baseMatchCount ?? home?.demandSnapshot?.matchCount ?? 0;
   const baseTopMatch = sim.baseTopMatch ?? home?.demandSnapshot?.topMatch ?? home.matchScore ?? 0;
-  const basePrice = home.askingPrice || price;
+  const basePrice = home.priceExpectation || price;
   const elasticity = sim.priceElasticity ?? 0.8;
   const topSensitivity = sim.topMatchSensitivity ?? 10;
   const priceDelta = basePrice ? (price - basePrice) / basePrice : 0;
@@ -1248,7 +1308,7 @@ function renderDemandMapSection(home) {
       : [];
     return renderMapCard({
       title: 'Who’s looking here',
-      description: 'Heatmap of wishlist locations covering this property. Counts remain anonymised.',
+      description: 'Heatmap of wishlist locations covering this home. Counts remain anonymised.',
       regions: hotspots,
       formatter: (region) => `${region.count || 0} buyers searching here`,
       emptyCopy: 'Demand map loads once buyer wishlists include this area.',
@@ -1306,32 +1366,32 @@ function renderSellerActionPanel(home) {
 
   const actions = [
     {
-      label: 'Edit listing',
-      description: 'Update specs, media, or disclosures to refresh the match engine.',
+      label: 'Edit home details',
+      description: 'Keep specs current so the match engine reflects your home accurately.',
       locked: false,
-      handler: () => openEditListingModal(home),
+      handler: () => openEditHomeModal(home),
     },
     {
-      label: 'Invite / link agent',
-      description: 'Share a read-only demand snapshot with your agent or advisor.',
+      label: 'Invite / link my agent',
+      description: 'Send your agent a demand snapshot without revealing your address.',
       locked: false,
       handler: () => openShareModal(home, { mode: 'agent' }),
     },
     {
-      label: 'Message matched buyers',
-      description: 'Start anonymised chats inside the platform (no PII exchange).',
+      label: 'Message matched buyers (Pro)',
+      description: 'Start privacy-first chats with interested buyers right inside the platform.',
       locked: !canMessage(),
       handler: () => {
         if (!canMessage()) {
           openUpgradePrompt();
         } else {
-          openChat(`property-${home.id}`, 'Matched buyers');
+          openChat(home.id, 'Matched buyers');
         }
       },
     },
     {
-      label: 'Share demand snapshot (Pro)',
-      description: 'Generate a shareable view with masked buyer data.',
+      label: 'Share demand snapshot (no address)',
+      description: 'Generate a shareable view with aggregated demand data only.',
       locked: !canSeeSnippets(),
       handler: () => {
         if (!canSeeSnippets()) {
@@ -1370,7 +1430,7 @@ function renderSellerActionPanel(home) {
 function renderPropertyCard(profile) {
   // Try template first
   const tpl = document.getElementById('property-card-template');
-  const summary = getPropertyMatchSummary(profile);
+  const summary = getHomeMatchSummary(profile);
   const pct = Math.round(summary.topScore || 0);
 
   const applyIntoNode = (node) => {
@@ -1403,18 +1463,18 @@ function renderPropertyCard(profile) {
     const messageBtn = node.querySelector('.contact-buyers') || node.querySelector('.js-message');
     const upgradeBtn = node.querySelector('.js-upgrade');
 
-    insightsBtn?.addEventListener('click', () => openPropertyInsights(profile));
+    insightsBtn?.addEventListener('click', () => openHomeInsights(profile));
 
     if (messageBtn) {
       if (!canMessage()) {
         messageBtn.disabled = true;
-        messageBtn.title = 'Upgrade to contact buyers';
+        messageBtn.title = 'Upgrade to message buyers';
         messageBtn.addEventListener('click', () => openUpgradePrompt());
         if (upgradeBtn) upgradeBtn.hidden = false;
       } else {
         messageBtn.disabled = false;
-        messageBtn.textContent = 'Message matched buyers';
-        messageBtn.addEventListener('click', () => openChat(`property-${profile?.id || 'unknown'}`, 'Matched buyers'));
+        messageBtn.textContent = 'Message matched buyers (Pro)';
+        messageBtn.addEventListener('click', () => openChat(profile?.id || 'unknown', 'Matched buyers'));
       }
     }
     return node;
@@ -1445,8 +1505,8 @@ function renderPropertyCard(profile) {
       <ul class="property-gaps"></ul>
     </div>
     <footer class="card-footer">
-      <button class="ghost-button view-insights">View insights</button>
-      <button class="primary-button contact-buyers">${canMessage() ? 'Message matched buyers' : 'Upgrade to contact buyers'}</button>
+      <button class="ghost-button view-insights">Open Home Profile</button>
+      <button class="primary-button contact-buyers">${canMessage() ? 'Message matched buyers (Pro)' : 'Upgrade to message buyers'}</button>
     </footer>
   `;
   const gapsUl = card.querySelector('.property-gaps');
@@ -1456,18 +1516,18 @@ function renderPropertyCard(profile) {
   if (!canMessage()) {
     msgBtn.addEventListener('click', () => openUpgradePrompt());
     msgBtn.disabled = false; // keep clickable to show upgrade
-    msgBtn.title = 'Upgrade to contact buyers';
+    msgBtn.title = 'Upgrade to message buyers';
   } else {
-    msgBtn.addEventListener('click', () => openChat(`property-${profile?.id || 'unknown'}`, 'Matched buyers'));
+    msgBtn.addEventListener('click', () => openChat(profile?.id || 'unknown', 'Matched buyers'));
   }
-  card.querySelector('.view-insights').addEventListener('click', () => openPropertyInsights(profile));
+  card.querySelector('.view-insights').addEventListener('click', () => openHomeInsights(profile));
   return card;
 }
 
 function renderAgentExperience() {
   const section = createSection({
     title: 'Agent Pro analytics',
-    description: 'Analyze buyer wishlists and compare private seller property profiles. No property advertising occurs here.',
+    description: 'Analyze buyer wishlists and compare private seller Home Profiles. No property advertising occurs here.',
   });
 
   const overview = document.createElement('div');
@@ -1488,7 +1548,7 @@ function renderAgentExperience() {
         <th>Buyer Wishlist</th>
         <th>Target Area</th>
         <th>Match Score</th>
-        <th>Aligned Property Profiles</th>
+        <th>Aligned Home Profiles</th>
       </tr>
     </thead>
     <tbody>
@@ -1559,7 +1619,7 @@ function openWishlistModal(wishlist) {
       </div>
       <div>
         <h3>Supply vs Me</h3>
-        <p>Matched Property Profiles: ${wishlist.matchedProfiles}</p>
+        <p>Matched Home Profiles: ${wishlist.matchedProfiles}</p>
         <p>Top match score: ${wishlist.topScore}%</p>
         <p>${wishlist.analytics.gap}</p>
         <p>${wishlist.analytics.trend}</p>
@@ -1617,8 +1677,8 @@ function openWishlistForm(title, wishlist) {
       },
     },
     {
-      title: 'Property details',
-      description: 'Select property type, bedroom/bath counts, and optional size range.',
+      title: 'Home details',
+      description: 'Select home type, bedroom/bath counts, and optional size range.',
       render: (container) => renderDetailsStep(container, wizardState),
       validate: (container) => {
         const form = container.querySelector('form');
@@ -1823,7 +1883,7 @@ function openWishlistForm(title, wishlist) {
     const form = document.createElement('form');
     form.className = 'form-grid';
     form.innerHTML = `
-      <label>Property type
+      <label>Home type
         <select name="type">
           ${['Detached house', 'Townhome', 'Condo', 'Duplex', 'Acreage']
             .map((option) => `<option value="${option}" ${state.data.details.type === option ? 'selected' : ''}>${option}</option>`)
@@ -1895,7 +1955,7 @@ function openWishlistForm(title, wishlist) {
       <div class="form-grid">
         <article class="analytics-card">
           <h3>Match summary</h3>
-          <p>Matches: ${summary.matches} Property Profiles</p>
+          <p>Matches: ${summary.matches} Home Profiles</p>
           <p>Top score: ${summary.topScore}%</p>
           <p>${summary.gapHint}</p>
           <p>${summary.trend}</p>
@@ -1952,32 +2012,34 @@ function archiveWishlist(buyerId, wishlistId) {
   renderApp();
 }
 
-function openEditListingModal(home) {
-  modalTitle.textContent = 'Edit listing';
+function openEditHomeModal(home) {
+  modalTitle.textContent = 'Edit home details';
   modalContent.innerHTML = `
     <form class="form-grid">
       <label>
-        <span>Asking price</span>
-        <input type="number" value="${home.askingPrice || ''}" />
+        <span>Price expectation</span>
+        <input type="number" value="${home.priceExpectation || ''}" />
       </label>
       <label>
-        <span>Status</span>
+        <span>Home status</span>
         <select>
-          ${['Active', 'Under Contract', 'Off-market preview'].map((status) => `<option value="${status}" ${status === home.status ? 'selected' : ''}>${status}</option>`).join('')}
+          ${['Not for sale', 'Open to offers', 'Under contract (inactive)']
+            .map((status) => `<option value="${status}" ${status === home.status ? 'selected' : ''}>${status}</option>`)
+            .join('')}
         </select>
       </label>
       <label>
         <span>Headline summary</span>
         <textarea rows="3">${home.summary || ''}</textarea>
       </label>
-      <p class="section-description">Saving pushes updates to the match engine and refreshes the demand snapshot within 10 seconds.</p>
+      <p class="section-description">Saving updates your Home Profile and refreshes the demand snapshot within 10 seconds.</p>
       <div class="form-actions">
-        <button class="ghost-button" type="button" id="cancel-edit-listing">Cancel</button>
+        <button class="ghost-button" type="button" id="cancel-edit-home">Cancel</button>
         <button class="primary-button" type="submit">Save changes</button>
       </div>
     </form>
   `;
-  modalContent.querySelector('#cancel-edit-listing')?.addEventListener('click', () => modal.close());
+  modalContent.querySelector('#cancel-edit-home')?.addEventListener('click', () => modal.close());
   modalContent.querySelector('form')?.addEventListener('submit', (event) => {
     event.preventDefault();
     modal.close();
@@ -1988,14 +2050,14 @@ function openEditListingModal(home) {
 function openShareModal(home, { mode } = {}) {
   const shareMode = mode || 'agent';
   const isSnapshot = shareMode === 'snapshot';
-  modalTitle.textContent = isSnapshot ? 'Share demand snapshot' : 'Share with agent';
+  modalTitle.textContent = isSnapshot ? 'Share demand snapshot (no address)' : 'Share with agent';
   const urlFragment = `${home.id}-${shareMode}`;
   const shareUrl = `https://reach.example.com/share/${urlFragment}`;
   modalContent.innerHTML = `
     <div class="form-grid">
       <p>${isSnapshot
         ? 'Generate a read-only view of buyer demand with masked data. Recipients see aggregates but no PII.'
-        : 'Invite an agent to collaborate on this Property Profile. They will see anonymised demand data.'}</p>
+        : 'Invite an agent to collaborate on this Home Profile. They will see anonymised demand data.'}</p>
       <label>
         <span>Share link</span>
         <input type="text" value="${shareUrl}" readonly />
@@ -2021,24 +2083,24 @@ function openShareModal(home, { mode } = {}) {
   modal.showModal();
 }
 
-function openPropertyInsights(profile) {
+function openHomeInsights(profile) {
   const snapshot = profile.demandSnapshot || {};
   const fit = profile.wishlistFit || {};
-  modalTitle.textContent = `${profile.nickname || 'Property profile'} · Demand insights`;
+  modalTitle.textContent = `${profile.nickname || 'Home Profile'} · Demand insights`;
 
   modalContent.innerHTML = `
     <div class="form-grid">
       <article class="analytics-card">
         <h3>Demand snapshot</h3>
         <p><strong>${snapshot.matchCount ?? profile.matchedBuyers ?? 0}</strong> matching buyers</p>
-        <p><strong>${formatPercent(snapshot.topMatch ?? profile.matchScore, 0)}</strong> top match</p>
+        <p><strong>${formatPercent(snapshot.topMatch ?? profile.matchScore, 0)}</strong> top match %</p>
         <p><strong>${snapshot.preapprovedCount ?? 0}</strong> pre-approved buyers</p>
       </article>
       <article class="analytics-card">
         <h3>Wishlist fit</h3>
         <ul>
           <li>Location: ${formatPercent(fit.location, 0)}</li>
-          <li>Price: ${formatPercent(fit.price, 0)} (gate)</li>
+          <li>Price expectation: ${formatPercent(fit.price, 0)} (gate)</li>
           <li>Must-haves: ${formatPercent(fit.mustHave, 0)}</li>
           <li>Nice-to-haves: ${formatPercent(fit.niceToHave, 0)}</li>
         </ul>
@@ -2050,7 +2112,7 @@ function openPropertyInsights(profile) {
           ? 'Start conversations with top matches or share a demand snapshot with your advisor.'
           : 'Upgrade to Seller · Pro to unlock buyer profiles, run what-if simulations, and message matches.'}</p>
         <div class="form-actions">
-          <button class="${canSeeSnippets() ? 'ghost-button' : 'primary-button'}" type="button">${canSeeSnippets() ? 'Close' : 'Upgrade to contact buyers'}</button>
+          <button class="${canSeeSnippets() ? 'ghost-button' : 'primary-button'}" type="button">${canSeeSnippets() ? 'Close' : 'Upgrade to message buyers'}</button>
         </div>
       </article>
     </div>
@@ -2323,13 +2385,13 @@ function describeBudgetAlignment(match, price) {
   }
 
   if (Number.isFinite(max) && price > max) {
-    return `Above buyer max (${formatCurrency(max)})`;
+    return `Above buyer max (${formatCurrency(max)}) · match gated`;
   }
   if (Number.isFinite(min) && price < min) {
-    return `Below preferred range (${formatCurrency(min)} min)`;
+    return `Below buyer minimum (${formatCurrency(min)})`;
   }
   if (Number.isFinite(max)) {
-    return `${formatCurrency(price)} of ${formatCurrency(max)} max`;
+    return `${formatCurrency(price)} within ${formatCurrency(max)} max`;
   }
   return `${formatCurrency(price)} aligned`;
 }
@@ -2380,7 +2442,7 @@ function updatePropertyCards() {
   const container = document.getElementById('property-grid') || document.querySelector('.property-grid');
   if (!container) return;
   container.innerHTML = '';
-  (Array.isArray(propertyProfiles) ? propertyProfiles : []).forEach((profile) => {
+  (Array.isArray(homeProfiles) ? homeProfiles : []).forEach((profile) => {
     const card = renderPropertyCard(profile);
     container.appendChild(card);
   });
