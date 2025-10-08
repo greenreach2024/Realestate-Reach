@@ -9,7 +9,7 @@ Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flip
 
 ## 1. Global Product Rules
 ### Data visibility
-- Buyer Wishlists ("buyer listings") are public. They expose criteria, demand signals, and match metrics without any PII.
+- Buyer Wishlists are public. They expose criteria, demand signals, and match metrics without any PII.
 - Home Profiles are private. Sellers and agents use them only for matchmaking, analytics, and outreach.
 
 ### Contact permissions
@@ -38,6 +38,12 @@ Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flip
 | Buyer | Unlimited wishlists, analytics, respond to inbound messages | Paid upgrades not required |
 
 Terminology: always refer to public artefacts as **Buyer Wishlists** and private artefacts as **Home Profiles**. Avoid "listing" when describing seller experiences.
+
+### Notes on positioning (copy & compliance)
+- Buyer surfaces consistently refer to the experience as managing a **Wishlist**—never "search".
+- Seller experiences present properties as **Home Profiles**—never "listings".
+- Maintain **price expectation** as the naming for seller pricing. It is a gating criterion in match scoring.
+- All outreach remains in-app with anonymised identities. No PII is shown by default in any workflow.
 
 ## 2. Web Application Screens
 ### 2.1 Buyer Experience (mirrors MLS listing browsing)
