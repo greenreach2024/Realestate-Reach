@@ -11,6 +11,16 @@ import {
 } from './data.js';
 import { auth, renderAuthActions, renderLoginPage, renderRegistrationPage } from './auth.js';
 
+const budgetBenchmarks = {
+  'Port Moody Centre': { house: 1100000, townhouse: 925000, condo: 780000 },
+  Pleasantside: { house: 1040000, townhouse: 910000, condo: 720000 },
+  'Olympic Village': { house: 1300000, townhouse: 1080000, condo: 920000 },
+  'Coal Harbour': { house: 1500000, townhouse: 1180000, condo: 1050000 },
+  Kitsilano: { house: 1650000, townhouse: 1250000, condo: 990000 },
+  'Mount Pleasant': { house: 1380000, townhouse: 1120000, condo: 880000 },
+  Default: { house: 975000, townhouse: 865000, condo: 695000 },
+};
+
 const appRoot = document.getElementById('app-root');
 const roleSelect = document.getElementById('role-select');
 const modal = document.getElementById('modal');
@@ -2387,10 +2397,50 @@ function openWishlistForm(title, wishlist) {
     timeline: '0-3m',
     preApproved: false,
     details: { type: 'Detached house', beds: 3, baths: 2, sizeMin: null, sizeMax: null },
+    options: {
+      parking: false,
+      outdoor: false,
+      pets: false,
+      rentalFriendly: false,
+      tenure: 'Any',
+      age: 'Any',
+      floorAreaMin: null,
+      floorAreaMax: null,
+      lotSizeMin: null,
+      yearBuiltMin: null,
+    },
+    mortgage: { contact: false, documentName: '' },
     locations: [],
     features: { must: [], nice: [] },
     analytics: { supplyCount: 0, gap: 'Analytics pending.', trend: '' },
     active: true,
+  };
+
+  baseData.options = {
+    parking: false,
+    outdoor: false,
+    pets: false,
+    rentalFriendly: false,
+    tenure: 'Any',
+    age: 'Any',
+    floorAreaMin: null,
+    floorAreaMax: null,
+    lotSizeMin: null,
+    yearBuiltMin: null,
+    ...baseData.options,
+  };
+  if (baseData.details) {
+    if (baseData.details.sizeMin && baseData.options.floorAreaMin == null) {
+      baseData.options.floorAreaMin = baseData.details.sizeMin;
+    }
+    if (baseData.details.sizeMax && baseData.options.floorAreaMax == null) {
+      baseData.options.floorAreaMax = baseData.details.sizeMax;
+    }
+  }
+  baseData.mortgage = {
+    contact: false,
+    documentName: '',
+    ...baseData.mortgage,
   };
 
   const wizardState = {
@@ -2400,66 +2450,66 @@ function openWishlistForm(title, wishlist) {
 
   const steps = [
     {
-      title: 'Areas',
-      description: 'Add postal codes, polygons, or radius areas. Priority influences match scoring.',
-      render: (container) => renderAreasStep(container, wizardState),
+      title: 'Where',
+      description: 'Map-first selection: draw polygons, set radius, or pin postal codes just like REALTOR.ca.',
+      render: (container, updateCoach) => renderAreasStep(container, wizardState, updateCoach),
       validate: () => wizardState.data.locations.length > 0,
     },
     {
-      title: 'Budget & timeline',
-      description: 'Capture your price band, move-in window, and mortgage pre-approval status.',
-      render: (container) => renderBudgetStep(container, wizardState),
+      title: 'What',
+      description: 'Apply listing-style filters to shape this wishlist. You are saving demand, not posting a listing.',
+      render: (container, updateCoach) => renderDetailsStep(container, wizardState, updateCoach),
       validate: (container) => {
         const form = container.querySelector('form');
-        if (!form.reportValidity()) return false;
+        if (!form || !form.reportValidity()) return false;
         const formData = new FormData(form);
-        wizardState.data.budget.min = Number(formData.get('min'));
-        wizardState.data.budget.max = Number(formData.get('max'));
-        wizardState.data.timeline = formData.get('timeline');
-        wizardState.data.preApproved = formData.get('preApproved') === 'on';
-        wizardState.data.summary = formData.get('summary');
-        return true;
-      },
-    },
-    {
-      title: 'Home details',
-      description: 'Select home type, bedroom/bath counts, and optional size range.',
-      render: (container) => renderDetailsStep(container, wizardState),
-      validate: (container) => {
-        const form = container.querySelector('form');
-        if (!form.reportValidity()) return false;
-        const formData = new FormData(form);
+        wizardState.data.name = formData.get('name').toString().trim();
+        wizardState.data.summary = formData.get('summary').toString().trim();
         wizardState.data.details.type = formData.get('type');
         wizardState.data.details.beds = Number(formData.get('beds'));
         wizardState.data.details.baths = Number(formData.get('baths'));
-        wizardState.data.details.sizeMin = formData.get('sizeMin') ? Number(formData.get('sizeMin')) : null;
-        wizardState.data.details.sizeMax = formData.get('sizeMax') ? Number(formData.get('sizeMax')) : null;
-        return true;
+        wizardState.data.budget.min = Number(formData.get('min'));
+        wizardState.data.budget.max = Number(formData.get('max'));
+        wizardState.data.options.parking = formData.get('parking') === 'on';
+        wizardState.data.options.outdoor = formData.get('outdoor') === 'on';
+        wizardState.data.options.pets = formData.get('pets') === 'on';
+        wizardState.data.options.rentalFriendly = formData.get('rentalFriendly') === 'on';
+        wizardState.data.options.tenure = formData.get('tenure');
+        wizardState.data.options.age = formData.get('age');
+        wizardState.data.options.floorAreaMin = formData.get('floorAreaMin') ? Number(formData.get('floorAreaMin')) : null;
+        wizardState.data.options.floorAreaMax = formData.get('floorAreaMax') ? Number(formData.get('floorAreaMax')) : null;
+        wizardState.data.options.lotSizeMin = formData.get('lotSizeMin') ? Number(formData.get('lotSizeMin')) : null;
+        wizardState.data.options.yearBuiltMin = formData.get('yearBuiltMin') ? Number(formData.get('yearBuiltMin')) : null;
+        return wizardState.data.name.length > 0 && wizardState.data.budget.max >= wizardState.data.budget.min;
       },
     },
     {
-      title: 'Features',
-      description: 'Split requirements into must-haves and nice-to-haves.',
-      render: (container) => renderFeaturesStep(container, wizardState),
+      title: 'Must-haves vs Nice-to-haves',
+      description: 'Toggle features. Must-haves are hard constraints; nice-to-haves boost scoring.',
+      render: (container, updateCoach) => renderFeaturesStep(container, wizardState, updateCoach),
+      validate: () => true,
+    },
+    {
+      title: 'Timeline & financing',
+      description: 'Share closing window and financing readiness. Signals power match quality.',
+      render: (container, updateCoach) => renderTimelineStep(container, wizardState, updateCoach),
       validate: (container) => {
         const form = container.querySelector('form');
+        if (!form || !form.reportValidity()) return false;
         const formData = new FormData(form);
-        wizardState.data.features.must = formData
-          .get('must')
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean);
-        wizardState.data.features.nice = formData
-          .get('nice')
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean);
+        wizardState.data.timeline = formData.get('timeline');
+        wizardState.data.preApproved = formData.get('preApproved') === 'on';
+        wizardState.data.mortgage.contact = formData.get('mortgageOptIn') === 'on';
+        const fileInput = form.querySelector('input[name="preApprovalDocument"]');
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+          wizardState.data.mortgage.documentName = fileInput.files[0].name;
+        }
         return true;
       },
     },
     {
       title: 'Review & save',
-      description: 'Confirm your structured payload and review immediate match analytics.',
+      description: 'Confirm your buyer wishlist payload. Matches update instantly after you save.',
       render: (container) => renderReviewStep(container, wizardState),
       validate: () => true,
     },
@@ -2467,6 +2517,12 @@ function openWishlistForm(title, wishlist) {
 
   const renderWizard = () => {
     modalContent.innerHTML = '';
+
+    const layout = document.createElement('div');
+    layout.className = 'wishlist-wizard';
+
+    const main = document.createElement('div');
+    main.className = 'wizard-main';
 
     const progress = document.createElement('ol');
     progress.className = 'wizard-progress';
@@ -2485,39 +2541,50 @@ function openWishlistForm(title, wishlist) {
     container.className = 'wizard-step';
     const currentStep = steps[wizardState.step];
     const header = document.createElement('header');
-    header.innerHTML = `<h3>${currentStep.title}</h3><p class="section-description">${currentStep.description}</p>`;
+    header.innerHTML = `
+      <h3>${currentStep.title}</h3>
+      <p class="section-description">${currentStep.description}</p>
+      <p class="wishlist-reminder">You are saving a wishlist – buyers share demand, they do not post listings.</p>
+    `;
     container.append(header);
 
     const body = document.createElement('div');
-    currentStep.render(body);
+    const aside = document.createElement('aside');
+    aside.className = 'wizard-coach';
+    const updateCoach = () => renderBudgetCoach(aside, wizardState);
+    currentStep.render(body, updateCoach);
     container.append(body);
 
     const actions = document.createElement('div');
     actions.className = 'form-actions wizard-actions';
 
-    if (wizardState.step > 0) {
-      const backButton = document.createElement('button');
-      backButton.type = 'button';
-      backButton.className = 'ghost-button';
-      backButton.textContent = 'Back';
-      backButton.addEventListener('click', () => {
-        wizardState.step -= 1;
-        renderWizard();
-      });
-      actions.append(backButton);
-    }
+    const secondaryButton = document.createElement('button');
+    secondaryButton.type = 'button';
+    secondaryButton.className = 'ghost-button';
+    secondaryButton.textContent = wizardState.step === 0 ? 'Cancel' : 'Back';
+    secondaryButton.addEventListener('click', () => {
+      if (wizardState.step === 0) {
+        modal.close();
+        return;
+      }
+      wizardState.step -= 1;
+      renderWizard();
+    });
+    actions.append(secondaryButton);
 
     const primaryButton = document.createElement('button');
     primaryButton.type = 'button';
     primaryButton.className = 'primary-button';
     primaryButton.textContent = wizardState.step === steps.length - 1 ? 'Save wishlist' : 'Next';
     primaryButton.addEventListener('click', () => {
-      if (!steps[wizardState.step].validate(body)) {
-        body.querySelector('form')?.reportValidity();
+      const current = steps[wizardState.step];
+      const containerNode = main.querySelector('.wizard-step');
+      if (!current.validate(containerNode)) {
+        containerNode?.querySelector('form')?.reportValidity();
         return;
       }
       if (wizardState.step === steps.length - 1) {
-        saveWishlist(wizardState.data, Boolean(wishlist));
+        saveWishlist(wizardState.data);
         return;
       }
       wizardState.step += 1;
@@ -2525,19 +2592,79 @@ function openWishlistForm(title, wishlist) {
     });
     actions.append(primaryButton);
 
-    modalContent.append(progress, container, actions);
+    main.append(progress, container, actions);
+
+    renderBudgetCoach(aside, wizardState);
+    layout.append(main, aside);
+
+    modalContent.append(layout);
   };
 
-  const renderAreasStep = (container, state) => {
+  const renderAreasStep = (container, state, updateCoach) => {
     container.innerHTML = '';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'map-shell';
+
+    const mapCanvas = document.createElement('div');
+    mapCanvas.className = 'map-canvas';
+    mapCanvas.innerHTML = `
+      <div class="map-canvas__overlay">
+        <p class="map-canvas__hint">Draw areas just like REALTOR.ca. Double-click the map to drop your selection.</p>
+        <div class="draw-tools">
+          <button type="button" data-tool="polygon" class="ghost-button">Polygon</button>
+          <button type="button" data-tool="radius" class="ghost-button">Radius</button>
+          <button type="button" data-tool="pin" class="ghost-button">Pin</button>
+        </div>
+      </div>
+    `;
+
+    const controls = document.createElement('div');
+    controls.className = 'map-controls';
+    controls.innerHTML = `
+      <label class="search-label">Search an area
+        <input type="search" name="areaSearch" placeholder="City, postal code, neighbourhood" list="wishlist-area-suggest" />
+      </label>
+      <datalist id="wishlist-area-suggest">
+        ${buyerMapRegions.map((region) => `<option value="${region.label}">${region.label}</option>`).join('')}
+        <option value="Kitsilano"></option>
+        <option value="Mount Pleasant"></option>
+      </datalist>
+      <button class="primary-button" type="button" id="add-area-btn">Add to wishlist map</button>
+    `;
+
+    wrapper.append(mapCanvas, controls);
+    container.append(wrapper);
+
     const list = document.createElement('ul');
     list.className = 'area-list editable';
 
     const renderList = () => {
       list.innerHTML = '';
+      if (!state.data.locations.length) {
+        const empty = document.createElement('li');
+        empty.textContent = 'No areas added yet. Draw on the map or search to add neighbourhoods.';
+        list.append(empty);
+        return;
+      }
+
       state.data.locations.forEach((location, index) => {
         const li = document.createElement('li');
-        li.innerHTML = `<span class="area-type">${location.type}</span> ${location.label} · Priority ${location.priority}`;
+        li.innerHTML = `
+          <span class="area-type">${location.type}</span>
+          <strong>${location.label}</strong>
+          <span class="area-priority">Priority ${location.priority}</span>
+        `;
+        const priorityInput = document.createElement('input');
+        priorityInput.type = 'number';
+        priorityInput.min = '1';
+        priorityInput.max = '5';
+        priorityInput.value = location.priority ?? 1;
+        priorityInput.className = 'priority-input';
+        priorityInput.addEventListener('change', (event) => {
+          location.priority = Number(event.target.value);
+          updateCoach();
+        });
+
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'ghost-button';
@@ -2545,72 +2672,293 @@ function openWishlistForm(title, wishlist) {
         remove.addEventListener('click', () => {
           state.data.locations.splice(index, 1);
           renderList();
+          updateCoach();
         });
-        li.append(remove);
+
+        const toolbar = document.createElement('div');
+        toolbar.className = 'area-toolbar';
+        toolbar.append(priorityInput, remove);
+        li.append(toolbar);
         list.append(li);
       });
-      if (!state.data.locations.length) {
-        const empty = document.createElement('li');
-        empty.textContent = 'No areas added yet.';
-        list.append(empty);
-      }
     };
 
-    renderList();
-    container.append(list);
-
-    const form = document.createElement('form');
-    form.className = 'form-grid';
-    form.innerHTML = `
-      <label>Area type
-        <select name="type">
-          <option value="polygon">Polygon</option>
-          <option value="radius">Radius</option>
-          <option value="pin">Pin</option>
-          <option value="pc">Postal code</option>
-        </select>
-      </label>
-      <label>Label / description
-        <input name="label" required placeholder="e.g., Port Moody Centre" />
-      </label>
-      <label>Priority (1-5)
-        <input name="priority" type="number" min="1" max="5" value="1" />
-      </label>
-      <button class="ghost-button" type="submit">Add area</button>
-    `;
-
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const formData = new FormData(form);
+    const addArea = (label, type) => {
+      if (!label) return;
+      const typeValue = type || 'polygon';
       state.data.locations.push({
         id: generateId('loc'),
-        type: formData.get('type'),
-        label: formData.get('label'),
-        value: `${formData.get('type')}-${formData.get('label')}`,
-        priority: Number(formData.get('priority')),
-        count: 0,
+        type: typeValue,
+        label,
+        value: `${typeValue}-${label.toLowerCase().replace(/\s+/g, '-')}`,
+        priority: state.data.locations.length + 1,
+        count: Math.floor(Math.random() * 8) + 4,
       });
-      form.reset();
       renderList();
+      updateCoach();
+    };
+
+    let activeTool = 'polygon';
+    mapCanvas.querySelectorAll('button[data-tool]')?.forEach((button) => {
+      button.addEventListener('click', () => {
+        activeTool = button.dataset.tool || 'polygon';
+        mapCanvas.querySelectorAll('button[data-tool]').forEach((btn) => btn.classList.remove('active'));
+        button.classList.add('active');
+      });
     });
+    mapCanvas.querySelector('button[data-tool="polygon"]')?.classList.add('active');
+
+    mapCanvas.addEventListener('dblclick', () => {
+      const input = controls.querySelector('input[name="areaSearch"]');
+      const value = input?.value.trim();
+      if (value) {
+        addArea(value, activeTool);
+        if (input) input.value = '';
+      }
+    });
+
+    controls.querySelector('#add-area-btn')?.addEventListener('click', () => {
+      const input = controls.querySelector('input[name="areaSearch"]');
+      addArea(input?.value.trim(), activeTool);
+      if (input) input.value = '';
+    });
+
+    container.append(list);
+    renderList();
+  };
+
+  const renderDetailsStep = (container, state, updateCoach) => {
+    const form = document.createElement('form');
+    form.className = 'form-grid form-grid--wide';
+    form.innerHTML = `
+      <fieldset class="fieldset">
+        <legend>Wishlist identity</legend>
+        <label>Wishlist title
+          <input name="name" required value="${state.data.name ?? ''}" placeholder="e.g., Kitsilano family home" />
+        </label>
+        <label>Short description (appears to sellers)
+          <input name="summary" value="${state.data.summary ?? ''}" placeholder="e.g., 3-bed home with workspace" />
+        </label>
+      </fieldset>
+      <fieldset class="fieldset">
+        <legend>Core filters</legend>
+        <label>Property type
+          <select name="type">
+            ${['Detached house', 'Townhome', 'Condo', 'Duplex', 'Acreage']
+              .map((option) => `<option value="${option}" ${state.data.details.type === option ? 'selected' : ''}>${option}</option>`)
+              .join('')}
+          </select>
+        </label>
+        <label>Bedrooms
+          <input type="number" min="0" name="beds" value="${state.data.details.beds}" />
+        </label>
+        <label>Bathrooms
+          <input type="number" min="0" name="baths" value="${state.data.details.baths}" />
+        </label>
+        <label>Budget minimum
+          <input type="number" min="0" name="min" value="${state.data.budget.min || ''}" required />
+        </label>
+        <label>Budget maximum
+          <input type="number" min="0" name="max" value="${state.data.budget.max || ''}" required />
+        </label>
+      </fieldset>
+      <fieldset class="fieldset">
+        <legend>Options</legend>
+        <label class="checkbox-label"><input type="checkbox" name="parking" ${state.data.options.parking ? 'checked' : ''} /> Parking (garage or stall)</label>
+        <label class="checkbox-label"><input type="checkbox" name="outdoor" ${state.data.options.outdoor ? 'checked' : ''} /> Outdoor space</label>
+        <label class="checkbox-label"><input type="checkbox" name="pets" ${state.data.options.pets ? 'checked' : ''} /> Pet friendly</label>
+        <label class="checkbox-label"><input type="checkbox" name="rentalFriendly" ${state.data.options.rentalFriendly ? 'checked' : ''} /> Rental-friendly</label>
+        <label>Tenure preference
+          <select name="tenure">
+            ${['Any', 'Freehold', 'Strata', 'Leasehold']
+              .map((option) => `<option value="${option}" ${state.data.options.tenure === option ? 'selected' : ''}>${option}</option>`)
+              .join('')}
+          </select>
+        </label>
+        <label>Age of home
+          <select name="age">
+            ${['Any', '0-5 years', '5-15 years', '15+ years']
+              .map((option) => `<option value="${option}" ${state.data.options.age === option ? 'selected' : ''}>${option}</option>`)
+              .join('')}
+          </select>
+        </label>
+      </fieldset>
+      <details class="advanced-filters" ${state.data.options.floorAreaMin || state.data.options.floorAreaMax || state.data.options.lotSizeMin || state.data.options.yearBuiltMin ? 'open' : ''}>
+        <summary>Advanced filters (optional)</summary>
+        <div class="advanced-grid">
+          <label>Min floor area (sqft)
+            <input type="number" min="0" name="floorAreaMin" value="${state.data.options.floorAreaMin ?? ''}" />
+          </label>
+          <label>Max floor area (sqft)
+            <input type="number" min="0" name="floorAreaMax" value="${state.data.options.floorAreaMax ?? ''}" />
+          </label>
+          <label>Lot size minimum (sqft)
+            <input type="number" min="0" name="lotSizeMin" value="${state.data.options.lotSizeMin ?? ''}" />
+          </label>
+          <label>Earliest year built
+            <input type="number" min="1900" max="${new Date().getFullYear()}" name="yearBuiltMin" value="${state.data.options.yearBuiltMin ?? ''}" />
+          </label>
+        </div>
+      </details>
+    `;
+
+    const syncState = () => {
+      const formData = new FormData(form);
+      state.data.name = formData.get('name').toString().trim();
+      state.data.summary = formData.get('summary').toString().trim();
+      state.data.details.type = formData.get('type');
+      state.data.details.beds = Number(formData.get('beds'));
+      state.data.details.baths = Number(formData.get('baths'));
+      state.data.budget.min = Number(formData.get('min'));
+      state.data.budget.max = Number(formData.get('max'));
+      state.data.options.parking = formData.get('parking') === 'on';
+      state.data.options.outdoor = formData.get('outdoor') === 'on';
+      state.data.options.pets = formData.get('pets') === 'on';
+      state.data.options.rentalFriendly = formData.get('rentalFriendly') === 'on';
+      state.data.options.tenure = formData.get('tenure');
+      state.data.options.age = formData.get('age');
+      state.data.options.floorAreaMin = formData.get('floorAreaMin') ? Number(formData.get('floorAreaMin')) : null;
+      state.data.options.floorAreaMax = formData.get('floorAreaMax') ? Number(formData.get('floorAreaMax')) : null;
+      state.data.options.lotSizeMin = formData.get('lotSizeMin') ? Number(formData.get('lotSizeMin')) : null;
+      state.data.options.yearBuiltMin = formData.get('yearBuiltMin') ? Number(formData.get('yearBuiltMin')) : null;
+      updateCoach();
+    };
+
+    form.addEventListener('input', syncState);
+    form.addEventListener('change', syncState);
 
     container.append(form);
   };
 
-  const renderBudgetStep = (container, state) => {
+  const renderFeaturesStep = (container, state, updateCoach) => {
+    const catalogue = [
+      'EV-ready parking',
+      'Dedicated office',
+      'Outdoor space',
+      'Secondary suite',
+      'Pet-friendly building',
+      'Transit within 10 min',
+      'Rental flexibility',
+      'Rooftop deck',
+      'Private backyard',
+      'Wheelchair accessible',
+      'Pool or spa',
+    ];
+    const mustSet = new Set(state.data.features.must);
+    const niceSet = new Set(state.data.features.nice);
+    [...mustSet, ...niceSet].forEach((feature) => {
+      if (feature && !catalogue.includes(feature)) {
+        catalogue.push(feature);
+      }
+    });
+
+    const featureGrid = document.createElement('div');
+    featureGrid.className = 'feature-catalogue';
+
+    const summary = document.createElement('div');
+    summary.className = 'feature-summary';
+    summary.innerHTML = `
+      <article>
+        <h4>Must-haves</h4>
+        <ul class="pill-list"></ul>
+      </article>
+      <article>
+        <h4>Nice-to-haves</h4>
+        <ul class="pill-list"></ul>
+      </article>
+    `;
+    const [mustList, niceList] = summary.querySelectorAll('.pill-list');
+
+    const renderSummary = () => {
+      mustList.innerHTML = state.data.features.must.length
+        ? state.data.features.must.map((item) => `<li>${item}</li>`).join('')
+        : '<li>No must-haves yet.</li>';
+      niceList.innerHTML = state.data.features.nice.length
+        ? state.data.features.nice.map((item) => `<li>${item}</li>`).join('')
+        : '<li>No nice-to-haves yet.</li>';
+      updateCoach();
+    };
+
+    const toggleFeature = (feature, bucket) => {
+      if (bucket === 'must') {
+        if (mustSet.has(feature)) {
+          mustSet.delete(feature);
+        } else {
+          mustSet.add(feature);
+          niceSet.delete(feature);
+        }
+      } else if (bucket === 'nice') {
+        if (niceSet.has(feature)) {
+          niceSet.delete(feature);
+        } else {
+          niceSet.add(feature);
+          mustSet.delete(feature);
+        }
+      }
+      state.data.features.must = Array.from(mustSet);
+      state.data.features.nice = Array.from(niceSet);
+      renderCatalogue();
+      renderSummary();
+    };
+
+    const renderCatalogue = () => {
+      featureGrid.innerHTML = '';
+      catalogue.forEach((feature) => {
+        const card = document.createElement('div');
+        card.className = 'feature-card';
+        card.innerHTML = `
+          <span class="feature-label">${feature}</span>
+          <div class="feature-actions">
+            <button type="button" data-bucket="must" class="feature-btn ${mustSet.has(feature) ? 'active' : ''}">Must-have</button>
+            <button type="button" data-bucket="nice" class="feature-btn ${niceSet.has(feature) ? 'active' : ''}">Nice-to-have</button>
+          </div>
+        `;
+        card.querySelectorAll('.feature-btn').forEach((button) => {
+          button.addEventListener('click', () => toggleFeature(feature, button.dataset.bucket));
+        });
+        featureGrid.append(card);
+      });
+    };
+
+    const customForm = document.createElement('form');
+    customForm.className = 'feature-custom';
+    customForm.innerHTML = `
+      <label>Add custom requirement
+        <input type="text" name="customFeature" placeholder="e.g., Garden-level suite" />
+      </label>
+      <div class="feature-custom__actions">
+        <button type="submit" class="ghost-button" data-target="must">Add as must-have</button>
+        <button type="submit" class="ghost-button" data-target="nice">Add as nice-to-have</button>
+      </div>
+    `;
+
+    let submitTarget = 'must';
+    customForm.querySelectorAll('button[data-target]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        submitTarget = button.dataset.target;
+      });
+    });
+
+    customForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = customForm.querySelector('input[name="customFeature"]');
+      const value = input.value.trim();
+      if (!value) return;
+      if (!catalogue.includes(value)) catalogue.push(value);
+      toggleFeature(value, submitTarget);
+      input.value = '';
+    });
+
+    container.append(featureGrid, summary, customForm);
+    renderCatalogue();
+    renderSummary();
+  };
+
+  const renderTimelineStep = (container, state, updateCoach) => {
     const form = document.createElement('form');
     form.className = 'form-grid';
     form.innerHTML = `
-      <label>Wishlist summary
-        <input name="summary" placeholder="Short description" value="${state.data.summary ?? ''}" />
-      </label>
-      <label>Budget minimum
-        <input name="min" type="number" min="0" value="${state.data.budget.min || ''}" required />
-      </label>
-      <label>Budget maximum
-        <input name="max" type="number" min="0" value="${state.data.budget.max || ''}" required />
-      </label>
-      <label>Timeline
+      <label>Move-in timeframe
         <select name="timeline">
           ${['0-3m', '3-6m', '6-12m', '>12m']
             .map((option) => `<option value="${option}" ${state.data.timeline === option ? 'selected' : ''}>${option}</option>`)
@@ -2618,50 +2966,45 @@ function openWishlistForm(title, wishlist) {
         </select>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" name="preApproved" ${state.data.preApproved ? 'checked' : ''} /> Mortgage pre-approved
+        <input type="checkbox" name="preApproved" ${state.data.preApproved ? 'checked' : ''} /> Display mortgage pre-approval badge
       </label>
+      <label>Upload pre-approval proof (optional)
+        <input type="file" name="preApprovalDocument" accept="application/pdf,image/*" />
+        ${state.data.mortgage.documentName ? `<span class="file-hint">Current file: ${state.data.mortgage.documentName}</span>` : ''}
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="mortgageOptIn" ${state.data.mortgage.contact ? 'checked' : ''} /> Yes, have a mortgage coach contact me
+      </label>
+      <p class="section-description">Financing signals stay private. Sellers only see badges such as “Pre-approved buyer”.</p>
     `;
-    container.append(form);
-  };
 
-  const renderDetailsStep = (container, state) => {
-    const form = document.createElement('form');
-    form.className = 'form-grid';
-    form.innerHTML = `
-      <label>Home type
-        <select name="type">
-          ${['Detached house', 'Townhome', 'Condo', 'Duplex', 'Acreage']
-            .map((option) => `<option value="${option}" ${state.data.details.type === option ? 'selected' : ''}>${option}</option>`)
-            .join('')}
-        </select>
-      </label>
-      <label>Bedrooms
-        <input type="number" name="beds" min="0" value="${state.data.details.beds}" />
-      </label>
-      <label>Bathrooms
-        <input type="number" name="baths" min="0" value="${state.data.details.baths}" />
-      </label>
-      <label>Min size (sqft)
-        <input type="number" name="sizeMin" min="0" value="${state.data.details.sizeMin ?? ''}" />
-      </label>
-      <label>Max size (sqft)
-        <input type="number" name="sizeMax" min="0" value="${state.data.details.sizeMax ?? ''}" />
-      </label>
-    `;
-    container.append(form);
-  };
+    const syncState = () => {
+      const formData = new FormData(form);
+      state.data.timeline = formData.get('timeline');
+      state.data.preApproved = formData.get('preApproved') === 'on';
+      state.data.mortgage.contact = formData.get('mortgageOptIn') === 'on';
+      const fileInput = form.querySelector('input[name="preApprovalDocument"]');
+      if (fileInput && fileInput.files && fileInput.files[0]) {
+        state.data.mortgage.documentName = fileInput.files[0].name;
+        const hint = form.querySelector('.file-hint');
+        if (hint) {
+          hint.textContent = `Current file: ${state.data.mortgage.documentName}`;
+        } else {
+          const label = fileInput.parentElement;
+          if (label) {
+            const span = document.createElement('span');
+            span.className = 'file-hint';
+            span.textContent = `Current file: ${state.data.mortgage.documentName}`;
+            label.append(span);
+          }
+        }
+      }
+      updateCoach();
+    };
 
-  const renderFeaturesStep = (container, state) => {
-    const form = document.createElement('form');
-    form.className = 'form-grid';
-    form.innerHTML = `
-      <label>Must-have features (comma separated)
-        <textarea name="must" placeholder="e.g., Backyard, Dedicated office">${state.data.features.must.join(', ')}</textarea>
-      </label>
-      <label>Nice-to-have features (comma separated)
-        <textarea name="nice" placeholder="e.g., Trail access, EV-ready parking">${state.data.features.nice.join(', ')}</textarea>
-      </label>
-    `;
+    form.addEventListener('change', syncState);
+    form.addEventListener('input', syncState);
+
     container.append(form);
   };
 
@@ -2677,6 +3020,8 @@ function openWishlistForm(title, wishlist) {
     };
 
     const payload = {
+      name: state.data.name,
+      summary: state.data.summary,
       locations: state.data.locations.map((location, index) => ({
         type: location.type,
         value: location.value,
@@ -2686,36 +3031,129 @@ function openWishlistForm(title, wishlist) {
       timeline: state.data.timeline,
       preApproved: state.data.preApproved,
       details: {
-        type: state.data.details.type.toLowerCase().includes('condo') ? 'condo' : 'house',
+        type: state.data.details.type.toLowerCase().includes('condo')
+          ? 'condo'
+          : state.data.details.type.toLowerCase().includes('town')
+            ? 'townhouse'
+            : 'house',
         beds: state.data.details.beds,
         baths: state.data.details.baths,
-        sizeMin: state.data.details.sizeMin,
-        sizeMax: state.data.details.sizeMax,
+        sizeMin: state.data.options.floorAreaMin ?? state.data.details.sizeMin,
+        sizeMax: state.data.options.floorAreaMax ?? state.data.details.sizeMax,
       },
+      options: state.data.options,
       features: state.data.features,
+      mortgage: state.data.mortgage,
       visibility: 'public',
     };
 
     container.innerHTML = `
-      <div class="form-grid">
+      <div class="review-grid">
         <article class="analytics-card">
           <h3>Match summary</h3>
-          <p>Matches: ${summary.matches} Home Profiles</p>
-          <p>Top score: ${summary.topScore}%</p>
+          <p><strong>${summary.matches}</strong> Home Profiles meet your constraints.</p>
+          <p><strong>${summary.topScore}%</strong> top match score · ${summary.matchRange} band.</p>
           <p>${summary.gapHint}</p>
           <p>${summary.trend}</p>
+        </article>
+        <article class="analytics-card">
+          <h3>Wishlist recap</h3>
+          <p><strong>${state.data.name || 'Untitled wishlist'}</strong></p>
+          <p>${state.data.summary || 'Add a short description to help sellers recognise your household.'}</p>
+          <p>Areas: ${state.data.locations.map((loc) => loc.label).join(', ') || 'Add at least one area to publish.'}</p>
+          <p>Budget: ${formatCurrency(state.data.budget.min)} – ${formatCurrency(state.data.budget.max)}</p>
+          <p>Type: ${state.data.details.type} · ${state.data.details.beds} bed / ${state.data.details.baths} bath</p>
+          <p>Timeline: ${state.data.timeline} · Pre-approved: ${state.data.preApproved ? 'Yes' : 'No'}</p>
+          <p>Must-haves: ${state.data.features.must.join(', ') || '—'}</p>
+          <p>Nice-to-haves: ${state.data.features.nice.join(', ') || '—'}</p>
         </article>
         <article class="analytics-card">
           <h3>Normalised payload</h3>
           <pre class="payload-preview">${JSON.stringify(payload, null, 2)}</pre>
         </article>
       </div>
+      <p class="section-description emphasise">Saving publishes your wishlist to sellers – no listings are posted, only demand.</p>
     `;
   };
 
-  const saveWishlist = (data, isEditing) => {
+  const renderBudgetCoach = (container, state) => {
+    const insights = calculateBudgetCoach(state.data);
+    container.innerHTML = `
+      <h3>Budget Coach</h3>
+      <p class="section-description">Live affordability context for your chosen areas.</p>
+      <dl class="coach-metrics">
+        <div>
+          <dt>Benchmark price</dt>
+          <dd>${formatCurrency(insights.benchmark)}</dd>
+        </div>
+        <div>
+          <dt>Your midpoint</dt>
+          <dd>${insights.midpoint ? formatCurrency(insights.midpoint) : '—'}</dd>
+        </div>
+        <div>
+          <dt>Coverage</dt>
+          <dd>${insights.coverage}</dd>
+        </div>
+      </dl>
+      <p>${insights.message}</p>
+      <p class="section-description">${insights.timelineCopy}</p>
+    `;
+  };
+
+  const calculateBudgetCoach = (data) => {
+    const locations = Array.isArray(data.locations) ? data.locations : [];
+    const typeLabel = data.details?.type || 'House';
+    const typeKey = typeLabel.toLowerCase().includes('condo')
+      ? 'condo'
+      : typeLabel.toLowerCase().includes('town')
+        ? 'townhouse'
+        : 'house';
+
+    const resolvedBenchmarks = locations.map((location) => {
+      const matchKey = Object.keys(budgetBenchmarks).find((key) =>
+        location.label?.toLowerCase().includes(key.toLowerCase())
+      );
+      const table = budgetBenchmarks[matchKey] || budgetBenchmarks.Default;
+      return table[typeKey] ?? budgetBenchmarks.Default[typeKey];
+    });
+
+    const benchmark = resolvedBenchmarks.length
+      ? Math.round(resolvedBenchmarks.reduce((sum, value) => sum + value, 0) / resolvedBenchmarks.length)
+      : budgetBenchmarks.Default[typeKey];
+
+    const midpoint = Number.isFinite(Number(data.budget?.min)) && Number.isFinite(Number(data.budget?.max))
+      ? Math.round((Number(data.budget.min) + Number(data.budget.max)) / 2)
+      : 0;
+
+    let message;
+    if (!midpoint) {
+      message = 'Add a budget range to see how it compares with regional benchmarks.';
+    } else if (midpoint > benchmark + 50000) {
+      message = `You're targeting about ${formatCurrency(midpoint - benchmark)} above local benchmarks. Expect premium matches.`;
+    } else if (midpoint < benchmark - 50000) {
+      message = `Your midpoint is roughly ${formatCurrency(benchmark - midpoint)} under benchmark. Consider widening areas or preparing for competitive offers.`;
+    } else {
+      message = 'Your midpoint sits in line with benchmark pricing. Match coverage should feel strong.';
+    }
+
+    const coverage = resolvedBenchmarks.length
+      ? `${locations.length} area${locations.length === 1 ? '' : 's'} mapped`
+      : 'Add areas to unlock coverage stats.';
+
+    const timelineCopy = data.preApproved
+      ? `Pre-approval badge on. Sellers see you as finance-ready for a ${data.timeline} move.`
+      : `No pre-approval badge yet. Adding one can lift confidence for a ${data.timeline} move.`;
+
+    return { benchmark, midpoint, coverage, message, timelineCopy };
+  };
+
+  const saveWishlist = (data) => {
     const buyer = buyers.find((b) => b.id === state.buyerId);
     const clone = safeStructuredClone(data);
+    if (clone.details) {
+      clone.details.sizeMin = clone.options?.floorAreaMin ?? clone.details.sizeMin ?? null;
+      clone.details.sizeMax = clone.options?.floorAreaMax ?? clone.details.sizeMax ?? null;
+    }
     const existingIndex = buyer.wishlists.findIndex((w) => w.id === clone.id);
     if (existingIndex >= 0) {
       buyer.wishlists.splice(existingIndex, 1, clone);
