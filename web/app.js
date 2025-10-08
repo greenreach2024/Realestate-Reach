@@ -490,7 +490,7 @@ function renderWishlistHeader(buyer, wishlist) {
 
   const subline = document.createElement('p');
   subline.className = 'section-description';
-  subline.textContent = 'Private by default. We match you with homeowners whose places fit.';
+  subline.textContent = "We match your wishlist to homeowners. You'll only see home details when an owner shares their profile with you.";
   left.append(subline);
 
   if (wishlist.summary) {
@@ -702,6 +702,9 @@ function renderWishlistFilters(wishlist) {
 
 function renderWishlistSnapshot(wishlist) {
   const stats = getWishlistStats(wishlist);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'wishlist-v2__snapshot';
+
   const snapshot = document.createElement('div');
   snapshot.className = 'wishlist-v2__snapshot-row';
 
@@ -734,7 +737,14 @@ function renderWishlistSnapshot(wishlist) {
     snapshot.append(upgrade);
   }
 
-  return snapshot;
+  wrapper.append(snapshot);
+
+  const guardrail = document.createElement('p');
+  guardrail.className = 'wishlist-v2__snapshot-note';
+  guardrail.textContent = 'No public listings. Counts and scores only until a seller opts in.';
+  wrapper.append(guardrail);
+
+  return wrapper;
 }
 
 function renderWishlistBody(wishlist) {
@@ -743,7 +753,7 @@ function renderWishlistBody(wishlist) {
 
   const main = document.createElement('div');
   main.className = 'wishlist-v2__main';
-  main.append(renderWishlistFitCard(wishlist), renderMatchedHomesCard(wishlist));
+  main.append(renderWishlistFitCard(wishlist), renderWishlistPrivacyCard());
 
   const aside = document.createElement('aside');
   aside.className = 'wishlist-v2__aside';
@@ -812,131 +822,36 @@ function renderWishlistFitCard(wishlist) {
   return card;
 }
 
-function renderMatchedHomesCard(wishlist) {
+function renderWishlistPrivacyCard() {
   const card = document.createElement('article');
-  card.className = 'card wishlist-v2__matches-card';
+  card.className = 'card wishlist-v2__privacy-card';
   card.innerHTML = `
     <div class="card-header">
       <div>
-        <h3>Matched homes</h3>
-        <p class="section-description">Owners stay masked until they opt in. Fit % uses the same scoring contract the seller dashboard sees.</p>
+        <h3>Shared Home Views</h3>
+        <p class="section-description">Owners choose what to share and when.</p>
       </div>
     </div>
   `;
 
-  const matches = Array.isArray(wishlist.matches) ? wishlist.matches : [];
-  if (!matches.length) {
-    card.append(createEmptyState('Matches appear once homeowners publish compatible profiles.'));
-    return card;
-  }
+  const body = document.createElement('div');
+  body.className = 'card-body wishlist-v2__privacy-body';
 
-  const table = document.createElement('table');
-  table.className = 'wishlist-v2__match-table';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Home alias</th>
-        <th>Fit %</th>
-        <th>Owner expectation</th>
-        <th>Type</th>
-        <th>Beds/Baths</th>
-        <th>Area tag</th>
-        <th>Timeline alignment</th>
-      </tr>
-    </thead>
-  `;
+  const list = document.createElement('ul');
+  list.className = 'wishlist-v2__privacy-list';
 
-  const tbody = document.createElement('tbody');
-  matches.forEach((match) => {
-    const { row, drawer } = createMatchTableRow(match, wishlist);
-    tbody.append(row, drawer);
+  [
+    'When a homeowner shares a Home Profile with you, we notify you and link to a permissioned Shared Home View with only the fields they approved (photos and street address stay masked unless granted).',
+    'Chat stays in-app and unlocks only after the owner allows outreach, keeping identities private until both sides agree to connect.'
+  ].forEach((item) => {
+    const li = document.createElement('li');
+    li.textContent = item;
+    list.append(li);
   });
-  table.append(tbody);
 
-  card.append(table);
-
-  const note = document.createElement('p');
-  note.className = 'wishlist-v2__contact-note section-description';
-  note.textContent = 'Contact is gated until the owner opts in (or paid tier if applicable).';
-  card.append(note);
-
+  body.append(list);
+  card.append(body);
   return card;
-}
-
-function createMatchTableRow(match, wishlist) {
-  const row = document.createElement('tr');
-  row.className = 'wishlist-v2__match-row';
-
-  const nameCell = document.createElement('td');
-  nameCell.innerHTML = `<strong>${match.maskedAlias ?? match.alias}</strong><div class="wishlist-v2__match-subtitle">${match.alias ?? ''}</div>`;
-  if (match.newThisWeek) {
-    const badge = document.createElement('span');
-    badge.className = 'badge badge--accent wishlist-v2__match-badge';
-    badge.textContent = 'New';
-    nameCell.append(badge);
-  }
-
-  const fitCell = document.createElement('td');
-  fitCell.textContent = `${match.fitPercent ?? '—'}%`;
-
-  const priceCell = document.createElement('td');
-  priceCell.textContent = summarizeOwnerExpectation(wishlist, match);
-
-  const typeCell = document.createElement('td');
-  typeCell.textContent = match.type ?? '—';
-
-  const bedsCell = document.createElement('td');
-  bedsCell.textContent = `${match.beds ?? '—'} / ${match.baths ?? '—'}`;
-
-  const areaCell = document.createElement('td');
-  areaCell.textContent = match.areaTag ?? '—';
-
-  const timelineCell = document.createElement('td');
-  timelineCell.textContent = match.timelineAlignment ?? '—';
-
-  row.append(nameCell, fitCell, priceCell, typeCell, bedsCell, areaCell, timelineCell);
-
-  const drawer = document.createElement('tr');
-  drawer.className = 'wishlist-v2__match-drawer';
-  drawer.hidden = true;
-
-  const drawerCell = document.createElement('td');
-  drawerCell.colSpan = 7;
-  const factorList = Array.isArray(match.factors)
-    ? match.factors
-    : [
-        { label: 'Location coverage', value: match.fitBreakdown?.location ?? 0.8 },
-        { label: 'Price fit', value: match.fitBreakdown?.price ?? 0.8 },
-        { label: 'Must-have coverage', value: match.fitBreakdown?.mustHave ?? 0.8 },
-        { label: 'Nice-to-have coverage', value: match.fitBreakdown?.niceToHave ?? 0.6 },
-      ];
-
-  const factors = document.createElement('ul');
-  factors.className = 'wishlist-v2__match-factors';
-  factorList.forEach((factor) => {
-    const item = document.createElement('li');
-    item.innerHTML = `
-      <span>${factor.label}</span>
-      <span>${formatPercent(factor.value)}</span>
-      <p>${factor.note ?? ''}</p>
-    `;
-    factors.append(item);
-  });
-
-  const note = document.createElement('p');
-  note.className = 'wishlist-v2__match-note';
-  note.textContent = match.note ?? 'Score drivers surface here after the owner shares more data.';
-
-  drawerCell.append(factors, note);
-  drawer.append(drawerCell);
-
-  row.addEventListener('click', () => {
-    const isHidden = drawer.hidden;
-    drawer.hidden = !isHidden;
-    row.classList.toggle('is-open', !isHidden);
-  });
-
-  return { row, drawer };
 }
 
 function renderBudgetCoachCard(wishlist) {
@@ -1309,12 +1224,12 @@ function renderBuyerInsights(buyer) {
   section.innerHTML = `
     <div class="section-header">
       <h2>Wishlist insights</h2>
-      <p class="section-description">Compare Supply vs Me analytics, gap hints, and demand trends for each Buyer Wishlist.</p>
+      <p class="section-description">Counts and scores only until a seller opts in. Track demand gaps for each wishlist.</p>
     </div>
   `;
 
   if (!buyer.wishlists.length) {
-    section.append(createEmptyState('Create a wishlist to unlock Supply vs Me analytics.'));
+    section.append(createEmptyState('Create a wishlist to unlock private match insights.'));
     return section;
   }
 
@@ -1325,7 +1240,7 @@ function renderBuyerInsights(buyer) {
     card.className = 'analytics-card';
     card.innerHTML = `
       <h3>${wishlist.name}</h3>
-      <p><strong>Supply vs Me:</strong> ${wishlist.analytics.supplyCount} Home Profiles · ${wishlist.matchRange}</p>
+      <p><strong>Matches:</strong> ${wishlist.analytics.supplyCount} homeowners aligned · Fit range ${wishlist.matchRange}</p>
       <p>${wishlist.analytics.gap}</p>
       <p>${wishlist.analytics.trend}</p>
     `;
