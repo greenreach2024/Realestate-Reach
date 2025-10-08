@@ -22,6 +22,7 @@ const state = {
   role: 'buyer',
   buyerId: buyers[0].id,
   sellerTier: 'free',
+  selectedWishlistId: buyers?.[0]?.wishlists?.[0]?.id ?? null,
 };
 
 // Gating helpers for Seller/Agent
@@ -420,53 +421,797 @@ function renderRoleExperience() {
 
 function renderBuyerExperience() {
   const buyer = buyers.find((b) => b.id === state.buyerId) ?? buyers[0];
-  const section = createSection({
-    title: 'Buyer dashboard · My Wishlists',
-    description: 'Manage public Buyer Wishlists, monitor match analytics, and respond to paid sellers or agents who reach out.',
-  });
-
-  section.append(
-    renderMapCard({
-      title: 'Search areas',
-      description: 'Hover to see how many Home Profiles currently match in each focus area.',
-      regions: buyerMapRegions,
-      formatter: (region) => `Matched ${region.count} Home Profiles`,
-      emptyCopy: 'Add areas to your wishlists to populate this demand map.',
-    }),
-  );
-
-  const wishlistGrid = document.createElement('div');
-  wishlistGrid.className = 'grid grid-2';
-
-  if (!buyer.wishlists.length) {
-    wishlistGrid.append(createEmptyState('No matches yet — widen your budget or add more areas.'));
-  } else {
-    buyer.wishlists.forEach((wishlist) => {
-      wishlistGrid.append(renderBuyerWishlistCard(buyer, wishlist));
-    });
+  if (!buyer) {
+    return createEmptyState('No buyer profiles available.');
   }
 
-  const actions = document.createElement('article');
-  actions.className = 'card';
-  actions.innerHTML = `
+  if (!Array.isArray(buyer.wishlists) || !buyer.wishlists.length) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'buyer-experience';
+    wrapper.append(createEmptyState('Create a wishlist to unlock Supply vs Me analytics.'), renderBuyerMessaging(buyer), renderBuyerNotifications(buyer));
+    return wrapper;
+  }
+
+  if (!buyer.wishlists.some((w) => w.id === state.selectedWishlistId)) {
+    state.selectedWishlistId = buyer.wishlists[0]?.id ?? null;
+  }
+
+  const wishlist = buyer.wishlists.find((w) => w.id === state.selectedWishlistId) ?? buyer.wishlists[0];
+  const wrapper = document.createElement('div');
+  wrapper.className = 'buyer-experience';
+
+  wrapper.append(renderWishlistProfile(buyer, wishlist));
+  wrapper.append(renderBuyerInsights(buyer), renderBuyerMessaging(buyer), renderBuyerNotifications(buyer));
+  return wrapper;
+}
+
+function renderWishlistProfile(buyer, wishlist) {
+  const container = document.createElement('section');
+  container.className = 'wishlist-v2';
+
+  container.append(
+    renderWishlistHeader(buyer, wishlist),
+    renderWishlistSearchShell(wishlist),
+    renderWishlistSnapshot(wishlist),
+    renderWishlistBody(wishlist),
+  );
+
+  return container;
+}
+
+function renderWishlistHeader(buyer, wishlist) {
+  const header = document.createElement('article');
+  header.className = 'card wishlist-v2__header-card';
+
+  const content = document.createElement('div');
+  content.className = 'wishlist-v2__header-content';
+
+  const left = document.createElement('div');
+  left.className = 'wishlist-v2__header-left';
+
+  const eyebrow = document.createElement('p');
+  eyebrow.className = 'wishlist-v2__eyebrow';
+  eyebrow.textContent = 'Buyer · Wishlist Profile';
+  left.append(eyebrow);
+
+  const title = document.createElement('h2');
+  title.textContent = `Your Wishlist: ${wishlist.name}`;
+  left.append(title);
+
+  const subline = document.createElement('p');
+  subline.className = 'section-description';
+  subline.textContent = 'Private by default. We match you with homeowners whose places fit.';
+  left.append(subline);
+
+  if (wishlist.summary) {
+    const summary = document.createElement('p');
+    summary.className = 'wishlist-v2__summary';
+    summary.textContent = wishlist.summary;
+    left.append(summary);
+  }
+
+  const badges = document.createElement('div');
+  badges.className = 'wishlist-v2__badges';
+  if (wishlist.preApproved) {
+    const pre = document.createElement('span');
+    pre.className = 'badge badge--accent';
+    pre.textContent = 'Pre-approved';
+    badges.append(pre);
+  }
+  const timeline = document.createElement('span');
+  timeline.className = 'badge badge--outline';
+  timeline.textContent = `Timeline: ${wishlist.timeline}`;
+  badges.append(timeline);
+  left.append(badges);
+
+  const right = document.createElement('div');
+  right.className = 'wishlist-v2__header-actions';
+
+  if (buyer.wishlists.length > 1) {
+    const switcher = document.createElement('label');
+    switcher.className = 'wishlist-v2__switcher';
+    switcher.textContent = 'Switch wishlist';
+
+    const select = document.createElement('select');
+    buyer.wishlists.forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.name;
+      if (item.id === wishlist.id) {
+        option.selected = true;
+      }
+      select.append(option);
+    });
+    select.addEventListener('change', (event) => {
+      state.selectedWishlistId = event.target.value;
+      renderApp();
+    });
+    switcher.append(select);
+    right.append(switcher);
+  }
+
+  const buttons = document.createElement('div');
+  buttons.className = 'wishlist-v2__buttons';
+
+  const createButton = document.createElement('button');
+  createButton.className = 'primary-button';
+  createButton.textContent = 'New wishlist';
+  createButton.addEventListener('click', () => openWishlistForm('Create Buyer Wishlist'));
+  buttons.append(createButton);
+
+  const viewButton = document.createElement('button');
+  viewButton.className = 'ghost-button';
+  viewButton.textContent = 'View analytics';
+  viewButton.addEventListener('click', () => openWishlistModal(wishlist));
+  buttons.append(viewButton);
+
+  const editButton = document.createElement('button');
+  editButton.className = 'ghost-button';
+  editButton.textContent = 'Edit';
+  editButton.addEventListener('click', () => openWishlistForm('Edit Buyer Wishlist', wishlist));
+  buttons.append(editButton);
+
+  const duplicateButton = document.createElement('button');
+  duplicateButton.className = 'ghost-button';
+  duplicateButton.textContent = 'Duplicate';
+  duplicateButton.addEventListener('click', () => duplicateWishlist(buyer.id, wishlist.id));
+  buttons.append(duplicateButton);
+
+  const archiveButton = document.createElement('button');
+  archiveButton.className = 'ghost-button';
+  archiveButton.textContent = wishlist.active ? 'Archive' : 'Restore';
+  archiveButton.addEventListener('click', () => archiveWishlist(buyer.id, wishlist.id));
+  buttons.append(archiveButton);
+
+  right.append(buttons);
+
+  content.append(left, right);
+  header.append(content);
+
+  return header;
+}
+
+function renderWishlistSearchShell(wishlist) {
+  const shell = document.createElement('div');
+  shell.className = 'wishlist-v2__search-shell';
+
+  const mapPanel = document.createElement('article');
+  mapPanel.className = 'card wishlist-v2__map-panel';
+
+  const mapHeader = document.createElement('div');
+  mapHeader.className = 'wishlist-v2__map-header';
+  mapHeader.innerHTML = `
+    <h3>Search map</h3>
+    <p class="section-description">Matches update as homeowners publish private Home Profiles in these areas.</p>
+  `;
+  mapPanel.append(mapHeader);
+
+  const mapId = `wishlist-map-${wishlist.id}-${Math.random().toString(16).slice(2)}`;
+  const mapCanvas = document.createElement('div');
+  mapCanvas.id = mapId;
+  mapCanvas.className = 'wishlist-v2__map';
+  mapPanel.append(mapCanvas);
+
+  const areaPills = document.createElement('div');
+  areaPills.className = 'wishlist-v2__area-pills';
+  if (Array.isArray(wishlist.locations) && wishlist.locations.length) {
+    wishlist.locations.forEach((location) => {
+      const pill = document.createElement('span');
+      pill.className = 'pill wishlist-v2__area-pill';
+      const count = Number.isFinite(location.count) ? ` · ${location.count} matches` : '';
+      pill.innerHTML = `<strong>${location.label}</strong> · ${location.type} · Priority ${location.priority}${count}`;
+      areaPills.append(pill);
+    });
+  } else {
+    const empty = document.createElement('p');
+    empty.className = 'section-description';
+    empty.textContent = 'Add polygons, postal codes, or radius areas to guide the match engine.';
+    areaPills.append(empty);
+  }
+  mapPanel.append(areaPills);
+
+  initWishlistMap(mapId, wishlist);
+
+  shell.append(mapPanel, renderWishlistFilters(wishlist));
+  return shell;
+}
+
+function renderWishlistFilters(wishlist) {
+  const panel = document.createElement('article');
+  panel.className = 'card wishlist-v2__filters-panel';
+
+  const header = document.createElement('div');
+  header.innerHTML = `
+    <h3>Filters from your wishlist</h3>
+    <p class="section-description">Adjusting filters updates the saved wishlist. Nothing is publicly listed.</p>
+  `;
+  panel.append(header);
+
+  const grid = document.createElement('div');
+  grid.className = 'wishlist-v2__filter-grid';
+  const details = wishlist.details ?? {};
+
+  const filters = [
+    { label: 'Price range', value: formatBudgetBand(wishlist.budget) },
+    { label: 'Property type', value: details.type ?? 'Any' },
+    { label: 'Bedrooms', value: details.beds ? `${details.beds}+` : 'Flexible' },
+    { label: 'Bathrooms', value: details.baths ? `${details.baths}+` : 'Flexible' },
+    { label: 'Min size', value: details.sizeMin ? `${details.sizeMin} sq ft` : 'No minimum' },
+    { label: 'Max size', value: details.sizeMax ? `${details.sizeMax} sq ft` : 'Open' },
+  ];
+
+  filters.forEach((filter) => {
+    grid.append(renderWishlistFilterField(filter.label, filter.value));
+  });
+
+  panel.append(grid);
+
+  const mustGroup = document.createElement('div');
+  mustGroup.className = 'wishlist-v2__feature-group';
+  mustGroup.innerHTML = '<h4>Must-haves</h4>';
+  if (Array.isArray(wishlist.features?.must) && wishlist.features.must.length) {
+    wishlist.features.must.forEach((feature) => {
+      const chip = document.createElement('span');
+      chip.className = 'pill wishlist-v2__feature-pill';
+      chip.textContent = feature;
+      mustGroup.append(chip);
+    });
+  } else {
+    const empty = document.createElement('p');
+    empty.className = 'section-description';
+    empty.textContent = 'Add at least one non-negotiable to focus matches.';
+    mustGroup.append(empty);
+  }
+
+  const niceGroup = document.createElement('div');
+  niceGroup.className = 'wishlist-v2__feature-group';
+  niceGroup.innerHTML = '<h4>Nice-to-haves</h4>';
+  if (Array.isArray(wishlist.features?.nice) && wishlist.features.nice.length) {
+    wishlist.features.nice.forEach((feature) => {
+      const chip = document.createElement('span');
+      chip.className = 'pill wishlist-v2__feature-pill wishlist-v2__feature-pill--nice';
+      chip.textContent = feature;
+      niceGroup.append(chip);
+    });
+  } else {
+    const empty = document.createElement('p');
+    empty.className = 'section-description';
+    empty.textContent = 'Wishlist keeps flexible amenities separate from must-haves.';
+    niceGroup.append(empty);
+  }
+
+  panel.append(mustGroup, niceGroup);
+
+  const footer = document.createElement('p');
+  footer.className = 'wishlist-v2__filters-note';
+  footer.textContent = 'Matches refresh privately — homeowners opt in before you can chat.';
+  panel.append(footer);
+
+  return panel;
+}
+
+function renderWishlistSnapshot(wishlist) {
+  const stats = getWishlistStats(wishlist);
+  const snapshot = document.createElement('div');
+  snapshot.className = 'wishlist-v2__snapshot-row';
+
+  const metrics = [
+    { label: 'Matching homes (owners)', value: stats.matchingHomes?.toLocaleString?.() ?? '0' },
+    { label: 'Top fit', value: `${stats.topFit ?? 0}%` },
+    { label: 'New matches this week', value: stats.newMatches?.toLocaleString?.() ?? '0' },
+  ];
+
+  metrics.forEach((metric) => {
+    const card = document.createElement('article');
+    card.className = 'card wishlist-v2__snapshot-card';
+    card.innerHTML = `
+      <p class="wishlist-v2__snapshot-label">${metric.label}</p>
+      <p class="wishlist-v2__snapshot-value">${metric.value}</p>
+    `;
+    snapshot.append(card);
+  });
+
+  if (stats.upgradeEligible) {
+    const upgrade = document.createElement('article');
+    upgrade.className = 'card wishlist-v2__snapshot-card wishlist-v2__snapshot-card--cta';
+    upgrade.innerHTML = `
+      <p class="wishlist-v2__snapshot-label">Upgrade</p>
+      <p class="wishlist-v2__snapshot-value">Unlock homeowner chat (when a match opts in)</p>
+      <p class="section-description">Messaging unlocks after a homeowner approves contact or with Buyer · Pro.</p>
+      <button class="primary-button" type="button">Explore plans</button>
+    `;
+    upgrade.querySelector('button')?.addEventListener('click', () => window.gotoView?.('subscription'));
+    snapshot.append(upgrade);
+  }
+
+  return snapshot;
+}
+
+function renderWishlistBody(wishlist) {
+  const body = document.createElement('div');
+  body.className = 'wishlist-v2__body';
+
+  const main = document.createElement('div');
+  main.className = 'wishlist-v2__main';
+  main.append(renderWishlistFitCard(wishlist), renderMatchedHomesCard(wishlist));
+
+  const aside = document.createElement('aside');
+  aside.className = 'wishlist-v2__aside';
+  aside.append(renderBudgetCoachCard(wishlist));
+
+  body.append(main, aside);
+  return body;
+}
+
+function renderWishlistFitCard(wishlist) {
+  const breakdown = computeWishlistFitBreakdown(wishlist);
+  const priceGate = breakdown.price === 0 && Number.isFinite(Number(wishlist?.budget?.max));
+
+  const card = document.createElement('article');
+  card.className = 'card wishlist-v2__fit-card';
+  card.innerHTML = `
     <div class="card-header">
       <div>
-        <h3>Create a new Buyer Wishlist</h3>
-        <p class="section-description">Capture desired areas, budget, and features. Sellers see anonymised demand instantly.</p>
+        <h3>Fit breakdown</h3>
+        <p class="section-description">Weighted scoring used when matching your wishlist to private Home Profiles.</p>
       </div>
-      <span class="badge">Public</span>
     </div>
-    <div class="card-body">
-      <p>Use the wizard to add polygons, postal codes, budget bands, and lifestyle needs. Matchmaking runs immediately after saving.</p>
-    </div>
-    <footer class="card-footer">
-      <button class="primary-button" id="new-wishlist-btn">Launch wishlist wizard</button>
-    </footer>
   `;
-  actions.querySelector('#new-wishlist-btn').addEventListener('click', () => openWishlistForm('Create Buyer Wishlist'));
 
-  section.append(wishlistGrid, actions, renderBuyerInsights(buyer), renderBuyerMessaging(buyer), renderBuyerNotifications(buyer));
-  return section;
+  const list = document.createElement('ul');
+  list.className = 'wishlist-v2__fit-list';
+
+  [
+    { label: 'Location coverage', value: breakdown.location },
+    { label: 'Price fit', value: breakdown.price },
+    { label: 'Must-have coverage', value: breakdown.mustHave },
+    { label: 'Nice-to-have coverage', value: breakdown.niceToHave },
+  ].forEach((item) => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="wishlist-v2__fit-label">${item.label}</div>
+      <div class="wishlist-v2__fit-bar"><span style="width:${Math.min(100, Math.max(0, item.value * 100))}%;"></span></div>
+      <div class="wishlist-v2__fit-score">${formatPercent(item.value)}</div>
+    `;
+    list.append(li);
+  });
+
+  card.append(list);
+
+  if (priceGate) {
+    const gate = document.createElement('p');
+    gate.className = 'wishlist-v2__fit-gate';
+    gate.textContent = 'Price fit is gated because at least one owner expects above your max budget.';
+    card.append(gate);
+  }
+
+  if (wishlist.analytics?.gap) {
+    const gap = document.createElement('p');
+    gap.className = 'wishlist-v2__fit-gap';
+    gap.textContent = wishlist.analytics.gap;
+    card.append(gap);
+  }
+
+  if (wishlist.analytics?.trend) {
+    const trend = document.createElement('p');
+    trend.className = 'wishlist-v2__fit-trend';
+    trend.textContent = wishlist.analytics.trend;
+    card.append(trend);
+  }
+
+  return card;
+}
+
+function renderMatchedHomesCard(wishlist) {
+  const card = document.createElement('article');
+  card.className = 'card wishlist-v2__matches-card';
+  card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <h3>Matched homes</h3>
+        <p class="section-description">Owners stay masked until they opt in. Fit % uses the same scoring contract the seller dashboard sees.</p>
+      </div>
+    </div>
+  `;
+
+  const matches = Array.isArray(wishlist.matches) ? wishlist.matches : [];
+  if (!matches.length) {
+    card.append(createEmptyState('Matches appear once homeowners publish compatible profiles.'));
+    return card;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'wishlist-v2__match-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Home alias</th>
+        <th>Fit %</th>
+        <th>Owner expectation</th>
+        <th>Type</th>
+        <th>Beds/Baths</th>
+        <th>Area tag</th>
+        <th>Timeline alignment</th>
+      </tr>
+    </thead>
+  `;
+
+  const tbody = document.createElement('tbody');
+  matches.forEach((match) => {
+    const { row, drawer } = createMatchTableRow(match, wishlist);
+    tbody.append(row, drawer);
+  });
+  table.append(tbody);
+
+  card.append(table);
+
+  const note = document.createElement('p');
+  note.className = 'wishlist-v2__contact-note section-description';
+  note.textContent = 'Contact is gated until the owner opts in (or paid tier if applicable).';
+  card.append(note);
+
+  return card;
+}
+
+function createMatchTableRow(match, wishlist) {
+  const row = document.createElement('tr');
+  row.className = 'wishlist-v2__match-row';
+
+  const nameCell = document.createElement('td');
+  nameCell.innerHTML = `<strong>${match.maskedAlias ?? match.alias}</strong><div class="wishlist-v2__match-subtitle">${match.alias ?? ''}</div>`;
+  if (match.newThisWeek) {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge--accent wishlist-v2__match-badge';
+    badge.textContent = 'New';
+    nameCell.append(badge);
+  }
+
+  const fitCell = document.createElement('td');
+  fitCell.textContent = `${match.fitPercent ?? '—'}%`;
+
+  const priceCell = document.createElement('td');
+  priceCell.textContent = summarizeOwnerExpectation(wishlist, match);
+
+  const typeCell = document.createElement('td');
+  typeCell.textContent = match.type ?? '—';
+
+  const bedsCell = document.createElement('td');
+  bedsCell.textContent = `${match.beds ?? '—'} / ${match.baths ?? '—'}`;
+
+  const areaCell = document.createElement('td');
+  areaCell.textContent = match.areaTag ?? '—';
+
+  const timelineCell = document.createElement('td');
+  timelineCell.textContent = match.timelineAlignment ?? '—';
+
+  row.append(nameCell, fitCell, priceCell, typeCell, bedsCell, areaCell, timelineCell);
+
+  const drawer = document.createElement('tr');
+  drawer.className = 'wishlist-v2__match-drawer';
+  drawer.hidden = true;
+
+  const drawerCell = document.createElement('td');
+  drawerCell.colSpan = 7;
+  const factorList = Array.isArray(match.factors)
+    ? match.factors
+    : [
+        { label: 'Location coverage', value: match.fitBreakdown?.location ?? 0.8 },
+        { label: 'Price fit', value: match.fitBreakdown?.price ?? 0.8 },
+        { label: 'Must-have coverage', value: match.fitBreakdown?.mustHave ?? 0.8 },
+        { label: 'Nice-to-have coverage', value: match.fitBreakdown?.niceToHave ?? 0.6 },
+      ];
+
+  const factors = document.createElement('ul');
+  factors.className = 'wishlist-v2__match-factors';
+  factorList.forEach((factor) => {
+    const item = document.createElement('li');
+    item.innerHTML = `
+      <span>${factor.label}</span>
+      <span>${formatPercent(factor.value)}</span>
+      <p>${factor.note ?? ''}</p>
+    `;
+    factors.append(item);
+  });
+
+  const note = document.createElement('p');
+  note.className = 'wishlist-v2__match-note';
+  note.textContent = match.note ?? 'Score drivers surface here after the owner shares more data.';
+
+  drawerCell.append(factors, note);
+  drawer.append(drawerCell);
+
+  row.addEventListener('click', () => {
+    const isHidden = drawer.hidden;
+    drawer.hidden = !isHidden;
+    row.classList.toggle('is-open', !isHidden);
+  });
+
+  return { row, drawer };
+}
+
+function renderBudgetCoachCard(wishlist) {
+  const market = wishlist.market ?? {};
+  const card = document.createElement('article');
+  card.className = 'card wishlist-v2__coach-card';
+
+  const header = document.createElement('div');
+  header.className = 'card-header';
+  header.innerHTML = `
+    <div>
+      <h3>Budget Coach & Trends</h3>
+      <p class="section-description">Estimated market range for your wishlist in ${market.area ?? (wishlist.locations?.[0]?.label ?? 'selected areas')}.</p>
+    </div>
+  `;
+  card.append(header);
+
+  const body = document.createElement('div');
+  body.className = 'card-body wishlist-v2__coach-body';
+
+  const rangeText = market.estimatedRange
+    ? `${formatCurrency(market.estimatedRange.low)} – ${formatCurrency(market.estimatedRange.high)}`
+    : 'Range pending more comps.';
+  const range = document.createElement('p');
+  range.className = 'wishlist-v2__coach-range';
+  range.innerHTML = `<span>Estimated range</span> ${rangeText}`;
+
+  const payment = document.createElement('p');
+  payment.className = 'wishlist-v2__coach-payment';
+  payment.innerHTML = `<span>Payment estimate</span> ${market.paymentEstimate ?? 'Add mortgage inputs to see payments.'}`;
+
+  const trendWrapper = document.createElement('div');
+  trendWrapper.className = 'wishlist-v2__coach-trend';
+
+  const trendHeader = document.createElement('div');
+  trendHeader.className = 'wishlist-v2__coach-trend-header';
+  trendHeader.innerHTML = `<span>12-month trend</span><strong>${market.trend?.change ?? '—'}</strong>`;
+
+  const sparkline = createSparkline(market.trend?.values);
+  sparkline.classList.add('wishlist-v2__sparkline');
+
+  const sources = document.createElement('div');
+  sources.className = 'wishlist-v2__coach-sources';
+  if (Array.isArray(market.sources) && market.sources.length) {
+    sources.innerHTML = market.sources.map((source) => `<span class="badge badge--outline">${source}</span>`).join('');
+  }
+
+  trendWrapper.append(trendHeader, sparkline, sources);
+
+  const commentary = document.createElement('p');
+  commentary.className = 'wishlist-v2__coach-commentary';
+  commentary.textContent = market.commentary ?? 'Trend commentary will populate as datasets refresh.';
+
+  body.append(range, payment, trendWrapper, commentary);
+  card.append(body);
+
+  return card;
+}
+
+function formatBudgetBand(budget = {}) {
+  const min = Number(budget?.min);
+  const max = Number(budget?.max);
+  const hasMin = Number.isFinite(min) && min > 0;
+  const hasMax = Number.isFinite(max) && max > 0;
+  if (hasMin && hasMax) {
+    return `${formatCurrency(min)} – ${formatCurrency(max)}`;
+  }
+  if (hasMin) {
+    return `From ${formatCurrency(min)}`;
+  }
+  if (hasMax) {
+    return `Up to ${formatCurrency(max)}`;
+  }
+  return 'Flexible';
+}
+
+function renderWishlistFilterField(label, value) {
+  const field = document.createElement('label');
+  field.className = 'wishlist-v2__filter-field';
+  const title = document.createElement('span');
+  title.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = value ?? '—';
+  input.readOnly = true;
+  field.append(title, input);
+  return field;
+}
+
+function getWishlistStats(wishlist) {
+  const stats = wishlist.stats ?? {};
+  return {
+    matchingHomes: Number.isFinite(stats.matchingHomes) ? stats.matchingHomes : wishlist.matchedProfiles ?? 0,
+    topFit: Number.isFinite(stats.topFit) ? stats.topFit : wishlist.topScore ?? 0,
+    newMatches: Number.isFinite(stats.newMatches) ? stats.newMatches : 0,
+    upgradeEligible: Boolean(stats.upgradeEligible),
+  };
+}
+
+function computeWishlistFitBreakdown(wishlist) {
+  const aggregate = aggregateFitScores(wishlist);
+  const base = wishlist.fitBreakdown ?? {};
+  const price = computePriceFitScore(wishlist, aggregate.price ?? base.price ?? 0.85);
+  return {
+    location: base.location ?? aggregate.location ?? 0.75,
+    price,
+    mustHave: base.mustHave ?? aggregate.mustHave ?? 0.7,
+    niceToHave: base.niceToHave ?? aggregate.niceToHave ?? 0.55,
+  };
+}
+
+function aggregateFitScores(wishlist) {
+  const matches = Array.isArray(wishlist.matches) ? wishlist.matches : [];
+  if (!matches.length) return {};
+  const totals = { location: 0, price: 0, mustHave: 0, niceToHave: 0 };
+  matches.forEach((match) => {
+    const fit = match.fitBreakdown ?? {};
+    if (Number.isFinite(fit.location)) totals.location += fit.location;
+    if (Number.isFinite(fit.price)) totals.price += fit.price;
+    if (Number.isFinite(fit.mustHave)) totals.mustHave += fit.mustHave;
+    if (Number.isFinite(fit.niceToHave)) totals.niceToHave += fit.niceToHave;
+  });
+  const divisor = matches.length || 1;
+  return {
+    location: totals.location / divisor,
+    price: totals.price / divisor,
+    mustHave: totals.mustHave / divisor,
+    niceToHave: totals.niceToHave / divisor,
+  };
+}
+
+function computePriceFitScore(wishlist, fallback = 0.8) {
+  const matches = Array.isArray(wishlist.matches) ? wishlist.matches : [];
+  const expectations = matches
+    .map((match) => Number(match.priceExpectation))
+    .filter((value) => Number.isFinite(value));
+  const budgetMax = Number(wishlist?.budget?.max);
+
+  if (Number.isFinite(budgetMax) && expectations.some((price) => price > budgetMax)) {
+    return 0;
+  }
+
+  if (!expectations.length) {
+    return fallback;
+  }
+
+  const withinBudget = expectations.every((price) => !Number.isFinite(budgetMax) || price <= budgetMax);
+  if (!withinBudget) {
+    return Math.min(fallback, 0.7);
+  }
+
+  return wishlist.fitBreakdown?.price ?? fallback;
+}
+
+function createSparkline(values) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'sparkline';
+
+  if (!Array.isArray(values) || values.length < 2) {
+    const placeholder = document.createElement('p');
+    placeholder.className = 'section-description';
+    placeholder.textContent = 'Trend data pending.';
+    wrapper.append(placeholder);
+    return wrapper;
+  }
+
+  const width = 180;
+  const height = 48;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  const points = values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  const lastValue = values[values.length - 1];
+  const lastX = width;
+  const lastY = height - ((lastValue - min) / range) * height;
+
+  wrapper.innerHTML = `
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+      <polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+      <circle cx="${lastX}" cy="${lastY}" r="3" fill="#2563eb" />
+    </svg>
+  `;
+
+  return wrapper;
+}
+
+function getRegionsForWishlist(wishlist) {
+  const fallbackLat = 49.2827;
+  const fallbackLng = -123.1207;
+  const locations = Array.isArray(wishlist.locations) ? wishlist.locations : [];
+  return locations.map((location, index) => {
+    const region = buyerMapRegions.find((candidate) =>
+      location.label?.toLowerCase?.().includes(candidate.label.toLowerCase()),
+    );
+    if (region) {
+      return {
+        ...region,
+        count: Number.isFinite(location.count) ? location.count : region.count,
+        priority: location.priority ?? 1,
+      };
+    }
+    return {
+      id: location.id ?? `fallback-${index}`,
+      label: location.label ?? `Focus area ${index + 1}`,
+      count: Number.isFinite(location.count) ? location.count : 0,
+      lat: fallbackLat + index * 0.01,
+      lng: fallbackLng - index * 0.01,
+      priority: location.priority ?? 1,
+    };
+  });
+}
+
+function initWishlistMap(mapId, wishlist) {
+  setTimeout(() => {
+    const container = document.getElementById(mapId);
+    if (!container) return;
+
+    const regions = getRegionsForWishlist(wishlist).filter(
+      (region) => Number.isFinite(region.lat) && Number.isFinite(region.lng),
+    );
+
+    if (typeof L === 'undefined' || !regions.length) {
+      container.textContent = 'Add areas to visualise coverage.';
+      container.classList.add('wishlist-v2__map--empty');
+      return;
+    }
+
+    const existing = container.dataset.initialised;
+    if (existing) return;
+    container.dataset.initialised = 'true';
+
+    const centerLat = regions.reduce((sum, region) => sum + region.lat, 0) / regions.length;
+    const centerLng = regions.reduce((sum, region) => sum + region.lng, 0) / regions.length;
+
+    const map = L.map(mapId, {
+      zoomControl: true,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+    }).setView([centerLat, centerLng], 12);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 18,
+    }).addTo(map);
+
+    regions.forEach((region) => {
+      const radius = 12 + Math.min(18, (region.count ?? 0) * 0.8);
+      const marker = L.circleMarker([region.lat, region.lng], {
+        radius,
+        color: '#2563eb',
+        weight: 2,
+        fillColor: '#60a5fa',
+        fillOpacity: 0.35,
+      }).addTo(map);
+      marker.bindTooltip(
+        `${region.label}<br>${region.count ?? 0} matched homes` +
+          (region.priority ? `<br>Priority ${region.priority}` : ''),
+        { permanent: false, direction: 'top' },
+      );
+    });
+  }, 60);
+}
+
+function summarizeOwnerExpectation(wishlist, match) {
+  const expectation = Number(match.priceExpectation);
+  const minBudget = Number(wishlist?.budget?.min);
+  const maxBudget = Number(wishlist?.budget?.max);
+  if (!Number.isFinite(expectation)) {
+    return 'Owner expectation undisclosed';
+  }
+  if (Number.isFinite(maxBudget) && expectation > maxBudget) {
+    return `${formatCurrency(expectation)} · above your ${formatCurrency(maxBudget)} max`;
+  }
+  if (Number.isFinite(minBudget) && expectation < minBudget) {
+    return `${formatCurrency(expectation)} · below your ${formatCurrency(minBudget)} floor`;
+  }
+  return `${formatCurrency(expectation)} · inside range`;
 }
 
 function renderBuyerWishlistCard(buyer, wishlist) {
@@ -1977,6 +2722,7 @@ function openWishlistForm(title, wishlist) {
     } else {
       buyer.wishlists.unshift(clone);
     }
+    state.selectedWishlistId = clone.id;
     modal.close();
     renderApp();
   };
@@ -1997,6 +2743,7 @@ function duplicateWishlist(buyerId, wishlistId) {
   clone.topScore = Math.max(40, Math.min(100, clone.topScore - 4));
   clone.matchRange = 'Recalculating';
   buyer.wishlists.unshift(clone);
+  state.selectedWishlistId = clone.id;
   renderApp();
 }
 
