@@ -82,7 +82,7 @@ export const buyers = [
                 note: 'Trail access nearby but no suite for multi-generational living.',
               },
             ],
-            note: 'High intent homeowner prepping listing materials; 60-day closing ideal.',
+            note: 'High intent homeowner prepping Home Profile materials; 60-day closing ideal.',
           },
           {
             id: 'wishlist-1-match-2',
@@ -150,7 +150,7 @@ export const buyers = [
               {
                 label: 'Location coverage',
                 value: 0.9,
-                note: 'Radius search fully covers the street segment.',
+                note: 'Wishlist radius coverage fully covers the street segment.',
               },
               {
                 label: 'Price fit',
@@ -262,7 +262,7 @@ export const buyers = [
                 note: 'Guest suite missing but fitness amenity present.',
               },
             ],
-            note: 'Owner would allow pre-inspection ahead of soft listing launch.',
+            note: 'Owner would allow pre-inspection ahead of a soft Home Profile reveal.',
           },
           {
             id: 'wishlist-2-match-2',

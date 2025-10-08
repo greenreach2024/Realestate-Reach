@@ -282,7 +282,7 @@ function renderLanding() {
   const section = createSection({
     title: 'Demand-led matchmaking for Realestate Ready',
     description:
-      'Realestate Ready is not an MLS or listing site. Buyers publish wishlists; sellers and agents compare private Home Profiles against demand. The platform publishes demand, not supply.',
+      'Realestate Ready is not an MLS or property advertising site. Buyers publish wishlists; sellers and agents compare private Home Profiles against demand. The platform publishes demand, not supply.',
   });
 
   const hero = document.createElement('div');
@@ -591,7 +591,7 @@ function renderWishlistSearchShell(wishlist) {
   const mapHeader = document.createElement('div');
   mapHeader.className = 'wishlist-v2__map-header';
   mapHeader.innerHTML = `
-    <h3>Search map</h3>
+    <h3>Wishlist map</h3>
     <p class="section-description">Matches update as homeowners publish private Home Profiles in these areas.</p>
   `;
   mapPanel.append(mapHeader);
@@ -1342,7 +1342,7 @@ function renderBuyerMessaging(buyer) {
   messagingSection.innerHTML = `
     <div class="section-header">
       <h2>Messages</h2>
-      <p class="section-description">Threads appear when a paid seller or agent contacts you. Replies stay anonymised unless you choose to disclose.</p>
+      <p class="section-description">Threads appear when a paid seller or agent contacts you. Conversations stay in-app and anonymised unless you choose to disclose.</p>
     </div>
   `;
 
@@ -2065,7 +2065,7 @@ function renderDemandMapSection(home) {
       title: 'Who’s looking here',
       description: 'Heatmap of wishlist locations covering this home. Counts remain anonymised.',
       regions: hotspots,
-      formatter: (region) => `${region.count || 0} buyers searching here`,
+      formatter: (region) => `${region.count || 0} buyer wishlists targeting this area`,
       emptyCopy: 'Demand map loads once buyer wishlists include this area.',
     });
   }
@@ -2457,7 +2457,7 @@ function openWishlistForm(title, wishlist) {
     },
     {
       title: 'What',
-      description: 'Apply listing-style filters to shape this wishlist. You are saving demand, not posting a listing.',
+      description: 'Apply familiar MLS-style filters to shape this wishlist. You are saving demand, not advertising a property.',
       render: (container, updateCoach) => renderDetailsStep(container, wizardState, updateCoach),
       validate: (container) => {
         const form = container.querySelector('form');
@@ -2544,7 +2544,7 @@ function openWishlistForm(title, wishlist) {
     header.innerHTML = `
       <h3>${currentStep.title}</h3>
       <p class="section-description">${currentStep.description}</p>
-      <p class="wishlist-reminder">You are saving a wishlist – buyers share demand, they do not post listings.</p>
+      <p class="wishlist-reminder">You are saving a wishlist – buyers share demand, they do not post property ads.</p>
     `;
     container.append(header);
 
@@ -2621,7 +2621,7 @@ function openWishlistForm(title, wishlist) {
     const controls = document.createElement('div');
     controls.className = 'map-controls';
     controls.innerHTML = `
-      <label class="search-label">Search an area
+      <label class="search-label">Add an area to your wishlist
         <input type="search" name="areaSearch" placeholder="City, postal code, neighbourhood" list="wishlist-area-suggest" />
       </label>
       <datalist id="wishlist-area-suggest">
@@ -2642,7 +2642,7 @@ function openWishlistForm(title, wishlist) {
       list.innerHTML = '';
       if (!state.data.locations.length) {
         const empty = document.createElement('li');
-        empty.textContent = 'No areas added yet. Draw on the map or search to add neighbourhoods.';
+        empty.textContent = 'No areas added yet. Draw on the map or add areas to build your wishlist coverage.';
         list.append(empty);
         return;
       }
@@ -3072,7 +3072,7 @@ function openWishlistForm(title, wishlist) {
           <pre class="payload-preview">${JSON.stringify(payload, null, 2)}</pre>
         </article>
       </div>
-      <p class="section-description emphasise">Saving publishes your wishlist to sellers – no listings are posted, only demand.</p>
+      <p class="section-description emphasise">Saving publishes your wishlist to sellers – no property ads are posted, only demand.</p>
     `;
   };
 
@@ -3461,7 +3461,7 @@ function renderMapCard({ title, description, regions, formatter, emptyCopy }) {
           .bindPopup(`
             <div style="text-align: center; padding: 5px;">
               <strong>${region.label}</strong><br>
-              <span style="color: #1d4ed8; font-weight: bold;">${region.count} buyers searching</span>
+              <span style="color: #1d4ed8; font-weight: bold;">${region.count} buyer wishlists active</span>
             </div>
           `);
 
