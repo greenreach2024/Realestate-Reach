@@ -1,23 +1,23 @@
 # Realestate Ready – UX & Engineering Specification
 
 ## 0. Purpose & Positioning
-Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flipping the marketplace logic. Instead of showcasing public seller listings, the platform publishes **Buyer Wishlists** so that supply-side users can analyse real demand. Sellers and agents keep their **Property Profiles** private and use the analytics workspace to decide when and how to engage buyers. No personally identifiable information (PII) is surfaced in public views, and all conversations stay inside the product with anonymised aliases.
+Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flipping the marketplace logic. Instead of showcasing public seller listings, the platform publishes **Buyer Wishlists** so that supply-side users can analyse real demand. Sellers and agents keep their **Home Profiles** private and use the analytics workspace to decide when and how to engage buyers. No personally identifiable information (PII) is surfaced in public views, and all conversations stay inside the product with anonymised aliases.
 
 - **Public surface**: anonymised Buyer Wishlists with geo context, budget bands, feature priorities, and match scores.
-- **Private surface**: Property Profiles owned by sellers or agents. They never appear in public search results.
+- **Private surface**: Home Profiles owned by sellers or agents. They never appear in public search results.
 - **In-app communications**: only available to paying sellers and agents once a match is established. Buyers can reply but never initiate contact.
 
 ## 1. Global Product Rules
 ### Data visibility
 - Buyer Wishlists ("buyer listings") are public. They expose criteria, demand signals, and match metrics without any PII.
-- Property Profiles are private. Sellers and agents use them only for matchmaking, analytics, and outreach.
+- Home Profiles are private. Sellers and agents use them only for matchmaking, analytics, and outreach.
 
 ### Contact permissions
 - Only paid sellers and paid agents can start a conversation with a matched buyer through anonymised in-app messaging.
 - Buyers respond from the inbox and choose whether to disclose identity. All disclosures are explicit actions and logged.
 
 ### Pre-subscription experience
-- Free sellers can load a Property Profile and immediately see comparative analytics: number of matched buyers, score ranges, and demand gaps (e.g., "Most buyers want 3 baths; this profile lists 2").
+- Free sellers can load a Home Profile and immediately see comparative analytics: number of matched buyers, score ranges, and demand gaps (e.g., "Most buyers want 3 baths; this profile lists 2").
 - These high-level analytics sit outside the paywall to drive upgrade conversion.
 
 ### Privacy & compliance
@@ -27,8 +27,8 @@ Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flip
 
 ### Map UX parity
 - Geo maps are present on both buyer and seller workspaces.
-- Buyers see matched Property Profiles per area; sellers see buyer demand hotspots.
-- Hovering over an area reveals the count: buyers per region on the seller side, matched Property Profiles on the buyer side.
+- Buyers see matched Home Profiles per area; sellers see buyer demand hotspots.
+- Hovering over an area reveals the count: buyers per region on the seller side, matched Home Profiles on the buyer side.
 
 ### Subscription gating
 | Persona | Free tier | Paid tier |
@@ -37,18 +37,18 @@ Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flip
 | Agent (Pro) | N/A | Regional analytics, multi-property matching, messaging |
 | Buyer | Unlimited wishlists, analytics, respond to inbound messages | Paid upgrades not required |
 
-Terminology: always refer to public artefacts as **Buyer Wishlists** and private artefacts as **Property Profiles**. Avoid "listing" when describing seller experiences.
+Terminology: always refer to public artefacts as **Buyer Wishlists** and private artefacts as **Home Profiles**. Avoid "listing" when describing seller experiences.
 
 ## 2. Web Application Screens
 ### 2.1 Buyer Experience (mirrors MLS listing browsing)
 1. **Buyer Dashboard (My Wishlists)**
-   - Map component centred on selected neighbourhoods. Hover states display `Matched {N} property profiles` per polygon/pin.
+   - Map component centred on selected neighbourhoods. Hover states display `Matched {N} home profiles` per polygon/pin.
    - Wishlist cards styled like MLS listings but summarising the buyer's requirements. Each card shows:
      - Target areas (pins/polygons/radii) and priority
      - Budget range, property type, bedrooms/bathrooms, timeline
      - Must-have and nice-to-have tags
      - Pre-approval badge when toggled
-     - Status chip: `Matched X property profiles`
+     - Status chip: `Matched X home profiles`
    - Actions: Create, Edit, Duplicate, Archive.
 
 2. **Create/Edit Wishlist Wizard**
@@ -83,13 +83,13 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
    - Alerts for new matches, inbound messages, and significant area demand shifts.
 
 ### 2.2 Seller Experience (inverse of MLS seller tools)
-1. **Seller Dashboard (My Properties)**
+1. **Seller Dashboard (My Homes)**
    - Map with heat or pin overlays showing buyer hotspots. Hover tooltip: `{N} buyers searching here now`.
-   - Property Profile cards (private) featuring: property summary, match score bands, count of matching buyers, top wishlist snippet.
+   - Home Profile cards (private) featuring: home summary, match score bands, count of matching buyers, top wishlist snippet.
    - Pre-subscription analytics highlight what is accessible for free and what requires upgrade.
-   - Primary actions: `Add Property Profile`, `Upgrade to Contact Buyers`, `Find an Agent (Pro)`.
+   - Primary actions: `Add Home Profile`, `Upgrade to Contact Buyers`, `Find an Agent (Pro)`.
 
-2. **Create/Edit Property Profile**
+2. **Create/Edit Home Profile**
    - Step-based flow: approximate address/pin, core details (type, beds, baths, size, parking, age), feature tags, optional private media upload.
    - On save, immediately call match summary endpoint and show counts + score.
 
@@ -105,15 +105,15 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
    - Events for new matches, match score changes, analytics nudges, and upgrade prompts.
 
 6. **Seller Settings**
-   - Manage Property Profiles, subscriptions, billing, notification preferences, and optional Realtor (Pro) linkage.
+   - Manage Home Profiles, subscriptions, billing, notification preferences, and optional Realtor (Pro) linkage.
 
 ### 2.3 Agent & Mortgage Views
-- Agents gain regional analytics, multi-property match orchestration, and messaging similar to seller paid tier but scaled for multiple properties.
+- Agents gain regional analytics, multi-home match orchestration, and messaging similar to seller paid tier but scaled for multiple homes.
 - Mortgage agents access buyers who opted in or lack pre-approval, with secure chat templates and compliance-ready disclosures.
 
 ## 3. Map & Hover Behaviour
 - Shared map component reads geo layers (pins, polygons, radii) for both buyers and sellers.
-- Hover reveals counts: `Matched {N} property profiles` for buyers; `{N} buyers searching here` for sellers.
+- Hover reveals counts: `Matched {N} home profiles` for buyers; `{N} buyers searching here` for sellers.
 - Tooltips avoid street-level precision; data is aggregated to neighbourhood blocks.
 
 ## 4. Access & Gating Rules
@@ -126,8 +126,8 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 - Weighted factors (default): Location 50, Features 30, Lifestyle/Amenities 15, Timeline 5.
 - Example stored payload:
   ```json
-  {
-    "propertyId": "p123",
+    {
+      "homeId": "h123",
     "wishlistId": "w456",
     "score": 0.82,
     "factors": {
@@ -139,7 +139,7 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
     }
   }
   ```
-- Matches recalculate on wishlist or Property Profile updates and trigger relevant notifications.
+- Matches recalculate on wishlist or Home Profile updates and trigger relevant notifications.
 
 ## 6. UI States & Empty States
 - Buyer empty: `No matches yet — widen your budget or add more areas.`
@@ -155,7 +155,7 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 - Keep role/subscription checks in shared guards across frontend and API.
 - Recommended routing:
   - `/buyer/dashboard`, `/buyer/wishlists/:id`
-  - `/seller/dashboard`, `/seller/properties/:id`
+  - `/seller/dashboard`, `/seller/homes/:id`
   - `/messages`, `/account/subscription`
 - Default branch is `main`; all feature branches follow `feature/<scope>-<desc>` naming.
 - Every PR must pass linting and base tests prior to merge.

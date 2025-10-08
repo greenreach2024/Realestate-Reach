@@ -21,7 +21,7 @@ The prototype is built with vanilla HTML, CSS, and JavaScript (ES modules). No b
 1. Navigate to the `web/` directory.
 2. Serve the folder with a static web server (`python -m http.server 8000`) or open `index.html` directly in the browser.
 3. Use the navigation bar to explore landing content, onboarding flows, notifications, subscription plans, and each persona’s workspace.
-4. Interact with wishlist cards, listing insights, lead cards, and modal forms to experience the demand-led workflows described in the specification.
+4. Interact with wishlist cards, Home Profile insights, lead cards, and modal forms to experience the demand-led workflows described in the specification.
 
 ### Demo preview
 
