@@ -79,6 +79,333 @@ const generateId = (prefix) => {
   return `${prefix}-${random}`;
 };
 
+const scheduleFrame =
+  typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+    ? (fn) => window.requestAnimationFrame(fn)
+    : (fn) => setTimeout(fn, 16);
+
+const debounce = (fn, wait = 250) => {
+  let timeoutId;
+  return (...args) => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      timeoutId = undefined;
+      fn(...args);
+    }, wait);
+  };
+};
+
+const clamp = (value, min, max) => {
+  if (!Number.isFinite(Number(value))) return min;
+  return Math.min(max, Math.max(min, Number(value)));
+};
+
+const fallbackMapCenter = { lat: 49.2827, lng: -123.1207 };
+
+const wishlistSelections = new Map();
+const areaSuggestionCache = new Map();
+const marketTrendCache = new Map();
+const budgetCoachRegistry = new Map();
+
+function ensureWishlistSelection(wishlist) {
+  if (!wishlist || !wishlist.id) {
+    return { id: wishlist?.id ?? 'unknown', areas: [] };
+  }
+
+  if (!wishlistSelections.has(wishlist.id)) {
+    const locations = Array.isArray(wishlist.locations) ? wishlist.locations : [];
+    const areas = locations.map((location, index) => createAreaSeedFromLocation(location, index));
+    wishlistSelections.set(wishlist.id, { id: wishlist.id, areas });
+  }
+
+  const selection = wishlistSelections.get(wishlist.id);
+  syncWishlistLocations(wishlist, selection);
+  return selection;
+}
+
+function createAreaSeedFromLocation(location = {}, index = 0) {
+  const label = location.label ?? `Focus area ${index + 1}`;
+  const region = buyerMapRegions.find((candidate) =>
+    label.toLowerCase().includes(candidate.label.toLowerCase()),
+  );
+
+  const lat = Number(location.lat ?? region?.lat ?? fallbackMapCenter.lat + index * 0.01);
+  const lng = Number(location.lng ?? region?.lng ?? fallbackMapCenter.lng - index * 0.01);
+  const type = location.type ?? 'radius';
+  const weight = clamp(location.priority ?? location.weight ?? 3, 1, 5);
+  const base = {
+    id: location.id ?? generateId('wishlist-area'),
+    label,
+    type,
+    weight,
+    count: Number.isFinite(location.count) ? location.count : region?.count ?? 0,
+    center: { lat, lng },
+  };
+
+  if (type === 'polygon') {
+    const geometry = Array.isArray(location.geometry)
+      ? location.geometry
+          .map((point) =>
+            Array.isArray(point) && point.length >= 2
+              ? [Number(point[0]), Number(point[1])]
+              : null,
+          )
+          .filter(Boolean)
+      : createDefaultPolygonPoints({ lat, lng }, index);
+    base.geometry = geometry.length ? geometry : createDefaultPolygonPoints({ lat, lng }, index);
+    base.center = computeCentroid(base.geometry);
+  } else if (type === 'radius') {
+    base.radius = clamp(location.radiusMeters ?? location.radius ?? 600, 150, 5000);
+  } else {
+    base.radius = clamp(location.radiusMeters ?? location.radius ?? 350, 150, 5000);
+  }
+
+  return base;
+}
+
+function createDefaultPolygonPoints(center, index = 0) {
+  const size = 0.01 + index * 0.0015;
+  return [
+    [center.lat + size, center.lng - size],
+    [center.lat + size, center.lng + size],
+    [center.lat - size, center.lng + size],
+    [center.lat - size, center.lng - size],
+  ];
+}
+
+function computeCentroid(points = []) {
+  if (!Array.isArray(points) || !points.length) {
+    return { ...fallbackMapCenter };
+  }
+  const sums = points.reduce(
+    (acc, point) => {
+      const lat = Array.isArray(point) ? Number(point[0]) : Number(point?.lat);
+      const lng = Array.isArray(point) ? Number(point[1]) : Number(point?.lng);
+      if (Number.isFinite(lat)) acc.lat += lat;
+      if (Number.isFinite(lng)) acc.lng += lng;
+      return acc;
+    },
+    { lat: 0, lng: 0 },
+  );
+  return {
+    lat: sums.lat / points.length || fallbackMapCenter.lat,
+    lng: sums.lng / points.length || fallbackMapCenter.lng,
+  };
+}
+
+function syncWishlistLocations(wishlist, selection) {
+  if (!wishlist || !selection) return;
+  const exportable = selection.areas.map((area, index) => sanitizeLocationOutput({
+    id: area.id,
+    label: area.label || `Focus area ${index + 1}`,
+    type: area.type,
+    priority: area.weight,
+    count: area.count,
+    radiusMeters: area.type === 'polygon' ? undefined : area.radius,
+    geometry: area.type === 'polygon' ? area.geometry : undefined,
+    lat: area.center?.lat,
+    lng: area.center?.lng,
+  }));
+  wishlist.locations = exportable;
+}
+
+function sanitizeLocationOutput(raw = {}) {
+  return Object.fromEntries(
+    Object.entries(raw).filter(([, value]) => value !== undefined && value !== null),
+  );
+}
+
+function updateAreaSummaryPills(container, areas = []) {
+  if (!container) return;
+  container.innerHTML = '';
+  if (!areas.length) {
+    const empty = document.createElement('p');
+    empty.className = 'section-description';
+    empty.textContent = 'Add polygons, postal codes, or radius areas to guide the match engine.';
+    container.append(empty);
+    return;
+  }
+
+  areas.forEach((area) => {
+    const pill = document.createElement('span');
+    pill.className = 'pill wishlist-v2__area-pill';
+    const weightText = `Priority ${area.weight}`;
+    const matchText = Number.isFinite(area.count) && area.count > 0 ? ` · ${area.count} matches` : '';
+    pill.innerHTML = `<strong>${area.label}</strong> · ${area.type} · ${weightText}${matchText}`;
+    container.append(pill);
+  });
+}
+
+async function fetchAreaSuggestions(query) {
+  const key = query.toLowerCase();
+  if (areaSuggestionCache.has(key)) {
+    return areaSuggestionCache.get(key);
+  }
+
+  const suggestions = [];
+
+  if (typeof fetch === 'function') {
+    try {
+      const response = await fetch(`/areas/suggest?q=${encodeURIComponent(query)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        const items = Array.isArray(payload?.results)
+          ? payload.results
+          : Array.isArray(payload)
+            ? payload
+            : [];
+        items.forEach((item) => {
+          const normalised = normaliseSuggestion(item);
+          if (normalised) {
+            suggestions.push(normalised);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('Area suggestion fallback engaged', error);
+    }
+  }
+
+  if (!suggestions.length) {
+    const fallback = buyerMapRegions
+      .filter((region) => region.label.toLowerCase().includes(key))
+      .map((region) => ({
+        id: region.id,
+        label: region.label,
+        type: 'radius',
+        lat: region.lat,
+        lng: region.lng,
+        radius: 650,
+        count: region.count ?? 0,
+      }));
+    if (fallback.length) {
+      suggestions.push(...fallback);
+    }
+  }
+
+  if (!suggestions.length) {
+    suggestions.push({
+      id: generateId('area-suggest'),
+      label: query,
+      type: 'radius',
+      lat: fallbackMapCenter.lat,
+      lng: fallbackMapCenter.lng,
+      radius: 600,
+      count: 0,
+    });
+  }
+
+  areaSuggestionCache.set(key, suggestions);
+  return suggestions;
+}
+
+function normaliseSuggestion(item) {
+  if (!item) return null;
+  const label = item.label ?? item.name ?? item.title;
+  if (!label) return null;
+
+  const lat = Number(item.lat ?? item.latitude ?? item.center?.lat ?? item.center?.latitude);
+  const lng = Number(item.lng ?? item.longitude ?? item.center?.lng ?? item.center?.longitude ?? item.center?.lon);
+  const type = (item.type ?? item.kind ?? '').toString().toLowerCase();
+
+  const suggestion = {
+    id: item.id ?? generateId('area-suggest'),
+    label,
+    type,
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+    radius: item.radiusMeters ?? item.radius ?? item.defaultRadius ?? 600,
+    count: Number.isFinite(item.count)
+      ? Number(item.count)
+      : Number.isFinite(item.matchCount)
+        ? Number(item.matchCount)
+        : null,
+  };
+
+  const polygon = extractPolygon(item);
+  if (polygon.length >= 3) {
+    suggestion.type = 'polygon';
+    suggestion.polygon = polygon;
+    if (!Number.isFinite(suggestion.lat) || !Number.isFinite(suggestion.lng)) {
+      const center = computeCentroid(polygon);
+      suggestion.lat = center.lat;
+      suggestion.lng = center.lng;
+    }
+  } else {
+    suggestion.type = suggestion.type || 'radius';
+  }
+
+  if (!Number.isFinite(suggestion.lat) || !Number.isFinite(suggestion.lng)) {
+    return null;
+  }
+
+  suggestion.radius = clamp(suggestion.radius, 150, 5000);
+  suggestion.type = suggestion.type === 'polygon' ? 'polygon' : 'radius';
+  return suggestion;
+}
+
+function extractPolygon(source) {
+  const candidates = [];
+  if (Array.isArray(source?.polygon)) candidates.push(source.polygon);
+  if (Array.isArray(source?.geometry)) candidates.push(source.geometry);
+  if (Array.isArray(source?.geometry?.coordinates)) candidates.push(source.geometry.coordinates);
+
+  for (const candidate of candidates) {
+    const coords = candidate.flatMap((point) => {
+      const pair = toLatLngPair(point);
+      return pair ? [pair] : [];
+    });
+    if (coords.length >= 3) {
+      return coords;
+    }
+  }
+  return [];
+}
+
+function toLatLngPair(point) {
+  if (Array.isArray(point)) {
+    if (point.length >= 2) {
+      const first = Number(point[0]);
+      const second = Number(point[1]);
+      if (Number.isFinite(first) && Number.isFinite(second)) {
+        if (Math.abs(first) <= 90 && Math.abs(second) <= 180) {
+          return [first, second];
+        }
+        if (Math.abs(second) <= 90 && Math.abs(first) <= 180) {
+          return [second, first];
+        }
+      }
+    }
+  } else if (point && typeof point === 'object') {
+    const lat = Number(point.lat ?? point.latitude);
+    const lng = Number(point.lng ?? point.longitude ?? point.lon);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return [lat, lng];
+    }
+  }
+  return null;
+}
+
+function createAreaFromSuggestion(suggestion, index = 0) {
+  const location = {
+    id: suggestion.id ?? generateId('wishlist-area'),
+    label: suggestion.label ?? `Suggested area ${index + 1}`,
+    type: suggestion.type,
+    priority: clamp(suggestion.weight ?? suggestion.priority ?? 3, 1, 5),
+    count: suggestion.count ?? 0,
+    lat: suggestion.lat,
+    lng: suggestion.lng,
+    radius: suggestion.radius,
+    radiusMeters: suggestion.radius,
+    geometry: suggestion.polygon,
+  };
+  return createAreaSeedFromLocation(location, index);
+}
+
 const navButtons = document.querySelectorAll('.nav-btn');
 navButtons.forEach((button) => {
   button.addEventListener('click', () => {
@@ -602,25 +929,26 @@ function renderWishlistSearchShell(wishlist) {
   mapCanvas.className = 'wishlist-v2__map';
   mapPanel.append(mapCanvas);
 
+  const areaManager = document.createElement('div');
+  areaManager.className = 'wishlist-v2__area-manager';
+  areaManager.innerHTML = `
+    <div class="wishlist-v2__draw-header">
+      <p>Draw polygons or radius areas. Priorities sync with filters instantly.</p>
+    </div>
+  `;
+  mapPanel.append(areaManager);
+
+  const areaList = document.createElement('div');
+  areaList.className = 'wishlist-v2__area-list';
+  mapPanel.append(areaList);
+
   const areaPills = document.createElement('div');
   areaPills.className = 'wishlist-v2__area-pills';
-  if (Array.isArray(wishlist.locations) && wishlist.locations.length) {
-    wishlist.locations.forEach((location) => {
-      const pill = document.createElement('span');
-      pill.className = 'pill wishlist-v2__area-pill';
-      const count = Number.isFinite(location.count) ? ` · ${location.count} matches` : '';
-      pill.innerHTML = `<strong>${location.label}</strong> · ${location.type} · Priority ${location.priority}${count}`;
-      areaPills.append(pill);
-    });
-  } else {
-    const empty = document.createElement('p');
-    empty.className = 'section-description';
-    empty.textContent = 'Add polygons, postal codes, or radius areas to guide the match engine.';
-    areaPills.append(empty);
-  }
+  const selection = ensureWishlistSelection(wishlist);
+  updateAreaSummaryPills(areaPills, selection.areas);
   mapPanel.append(areaPills);
 
-  initWishlistMap(mapId, wishlist);
+  initWishlistMap(mapId, wishlist, { areaManager, areaList, areaPills });
 
   shell.append(mapPanel, renderWishlistFilters(wishlist));
   return shell;
@@ -633,72 +961,342 @@ function renderWishlistFilters(wishlist) {
   const header = document.createElement('div');
   header.innerHTML = `
     <h3>Filters from your wishlist</h3>
-    <p class="section-description">Adjusting filters updates the saved wishlist. Nothing is publicly listed.</p>
+    <p class="section-description">Adjust MLS-style filters to refine your saved wishlist. Updates remain private.</p>
   `;
   panel.append(header);
 
+  const form = document.createElement('form');
+  form.className = 'wishlist-v2__filters-form';
+  form.noValidate = true;
+
+  const budget = wishlist.budget ?? (wishlist.budget = {});
+  const details = wishlist.details ?? (wishlist.details = {});
+  const features = wishlist.features ?? (wishlist.features = { must: [], nice: [] });
+  features.must = Array.isArray(features.must) ? features.must : [];
+  features.nice = Array.isArray(features.nice) ? features.nice : [];
+
   const grid = document.createElement('div');
-  grid.className = 'wishlist-v2__filter-grid';
-  const details = wishlist.details ?? {};
+  grid.className = 'wishlist-v2__filters-grid';
 
-  const filters = [
-    { label: 'Price range', value: formatBudgetBand(wishlist.budget) },
-    { label: 'Property type', value: details.type ?? 'Any' },
-    { label: 'Bedrooms', value: details.beds ? `${details.beds}+` : 'Flexible' },
-    { label: 'Bathrooms', value: details.baths ? `${details.baths}+` : 'Flexible' },
-    { label: 'Min size', value: details.sizeMin ? `${details.sizeMin} sq ft` : 'No minimum' },
-    { label: 'Max size', value: details.sizeMax ? `${details.sizeMax} sq ft` : 'Open' },
-  ];
+  const notifyBudgetChange = () => {
+    scheduleFrame(() => requestBudgetCoachRefresh(wishlist.id));
+  };
 
-  filters.forEach((filter) => {
-    grid.append(renderWishlistFilterField(filter.label, filter.value));
-  });
+  grid.append(
+    createNumberField('Min price', budget.min, (value) => {
+      if (Number.isFinite(value)) {
+        budget.min = value;
+      } else {
+        delete budget.min;
+      }
+      notifyBudgetChange();
+    }, { prefix: '$', step: 5000 }),
+    createNumberField('Max price', budget.max, (value) => {
+      if (Number.isFinite(value)) {
+        budget.max = value;
+      } else {
+        delete budget.max;
+      }
+      notifyBudgetChange();
+    }, { prefix: '$', step: 5000 }),
+    createSelectField('Property type', [
+      { label: 'Any', value: '' },
+      { label: 'Detached house', value: 'Detached house' },
+      { label: 'Townhouse', value: 'Townhouse' },
+      { label: 'Condo', value: 'Condo' },
+      { label: 'Duplex', value: 'Duplex' },
+    ], details.type ?? '', (value) => {
+      details.type = value || undefined;
+    }),
+    createSelectField('Bedrooms', [
+      { label: 'Flexible', value: '' },
+      { label: '1+', value: '1' },
+      { label: '2+', value: '2' },
+      { label: '3+', value: '3' },
+      { label: '4+', value: '4' },
+      { label: '5+', value: '5' },
+    ], details.beds ? String(details.beds) : '', (value) => {
+      details.beds = value ? Number(value) : undefined;
+    }),
+    createSelectField('Bathrooms', [
+      { label: 'Flexible', value: '' },
+      { label: '1+', value: '1' },
+      { label: '2+', value: '2' },
+      { label: '3+', value: '3' },
+      { label: '4+', value: '4' },
+    ], details.baths ? String(details.baths) : '', (value) => {
+      details.baths = value ? Number(value) : undefined;
+    }),
+    createNumberField('Min size (sq ft)', details.sizeMin, (value) => {
+      if (Number.isFinite(value)) {
+        details.sizeMin = value;
+      } else {
+        delete details.sizeMin;
+      }
+    }, { step: 50 }),
+    createNumberField('Max size (sq ft)', details.sizeMax, (value) => {
+      if (Number.isFinite(value)) {
+        details.sizeMax = value;
+      } else {
+        delete details.sizeMax;
+      }
+    }, { step: 50 }),
+  );
 
-  panel.append(grid);
-
-  const mustGroup = document.createElement('div');
-  mustGroup.className = 'wishlist-v2__feature-group';
-  mustGroup.innerHTML = '<h4>Must-haves</h4>';
-  if (Array.isArray(wishlist.features?.must) && wishlist.features.must.length) {
-    wishlist.features.must.forEach((feature) => {
-      const chip = document.createElement('span');
-      chip.className = 'pill wishlist-v2__feature-pill';
-      chip.textContent = feature;
-      mustGroup.append(chip);
-    });
-  } else {
-    const empty = document.createElement('p');
-    empty.className = 'section-description';
-    empty.textContent = 'Add at least one non-negotiable to focus matches.';
-    mustGroup.append(empty);
-  }
-
-  const niceGroup = document.createElement('div');
-  niceGroup.className = 'wishlist-v2__feature-group';
-  niceGroup.innerHTML = '<h4>Nice-to-haves</h4>';
-  if (Array.isArray(wishlist.features?.nice) && wishlist.features.nice.length) {
-    wishlist.features.nice.forEach((feature) => {
-      const chip = document.createElement('span');
-      chip.className = 'pill wishlist-v2__feature-pill wishlist-v2__feature-pill--nice';
-      chip.textContent = feature;
-      niceGroup.append(chip);
-    });
-  } else {
-    const empty = document.createElement('p');
-    empty.className = 'section-description';
-    empty.textContent = 'Wishlist keeps flexible amenities separate from must-haves.';
-    niceGroup.append(empty);
-  }
-
-  panel.append(mustGroup, niceGroup);
+  form.append(grid, renderFeatureEditorSection(wishlist));
+  panel.append(form);
 
   const footer = document.createElement('p');
   footer.className = 'wishlist-v2__filters-note';
   footer.textContent = 'Matches refresh privately — homeowners opt in before you can chat.';
   panel.append(footer);
 
+  form.addEventListener('submit', (event) => event.preventDefault());
+
   return panel;
 }
+
+function createNumberField(label, value, onChange, options = {}) {
+  const field = document.createElement('label');
+  field.className = 'wishlist-v2__filter-field';
+
+  const title = document.createElement('span');
+  title.textContent = label;
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.inputMode = 'decimal';
+  input.min = '0';
+  if (options.step) input.step = String(options.step);
+  if (options.prefix) {
+    input.placeholder = `${options.prefix}975000`;
+  } else if (options.placeholder) {
+    input.placeholder = options.placeholder;
+  }
+  input.value = Number.isFinite(value) ? Number(value) : '';
+
+  const hint = document.createElement('small');
+  hint.className = 'wishlist-v2__filter-hint';
+  hint.textContent = Number.isFinite(value) ? formatHintValue(value, options.prefix) : '—';
+
+  const commit = () => {
+    const parsed = Number(input.value);
+    if (Number.isFinite(parsed)) {
+      hint.textContent = formatHintValue(parsed, options.prefix);
+      onChange(parsed);
+    } else {
+      hint.textContent = '—';
+      onChange(null);
+    }
+  };
+
+  input.addEventListener('change', commit);
+  input.addEventListener('blur', commit);
+
+  field.append(title, input, hint);
+  return field;
+}
+
+function createSelectField(label, options, selectedValue, onChange) {
+  const field = document.createElement('label');
+  field.className = 'wishlist-v2__filter-field';
+
+  const title = document.createElement('span');
+  title.textContent = label;
+
+  const select = document.createElement('select');
+  options.forEach((option) => {
+    const opt = document.createElement('option');
+    opt.value = option.value;
+    opt.textContent = option.label;
+    if ((option.value ?? '') === selectedValue) {
+      opt.selected = true;
+    }
+    select.append(opt);
+  });
+
+  select.addEventListener('change', () => {
+    onChange(select.value);
+  });
+
+  field.append(title, select);
+  return field;
+}
+
+function renderFeatureEditorSection(wishlist) {
+  const wrapper = document.createElement('section');
+  wrapper.className = 'wishlist-v2__feature-editor';
+
+  const heading = document.createElement('h4');
+  heading.textContent = 'Features & amenities';
+  wrapper.append(heading);
+
+  const description = document.createElement('p');
+  description.className = 'section-description';
+  description.textContent = 'Separate must-haves from flexible asks. Scores align with the seller dashboard.';
+  wrapper.append(description);
+
+  const columns = document.createElement('div');
+  columns.className = 'wishlist-v2__feature-columns';
+
+  const mustColumn = document.createElement('div');
+  mustColumn.className = 'wishlist-v2__feature-column';
+  const mustTitle = document.createElement('h5');
+  mustTitle.textContent = 'Must-haves';
+  mustColumn.append(mustTitle);
+  const mustList = document.createElement('ul');
+  mustList.className = 'wishlist-v2__feature-list';
+  mustColumn.append(mustList);
+
+  const niceColumn = document.createElement('div');
+  niceColumn.className = 'wishlist-v2__feature-column';
+  const niceTitle = document.createElement('h5');
+  niceTitle.textContent = 'Nice-to-haves';
+  niceColumn.append(niceTitle);
+  const niceList = document.createElement('ul');
+  niceList.className = 'wishlist-v2__feature-list';
+  niceColumn.append(niceList);
+
+  columns.append(mustColumn, niceColumn);
+  wrapper.append(columns);
+
+  const addForm = document.createElement('form');
+  addForm.className = 'wishlist-v2__feature-add';
+  addForm.noValidate = true;
+
+  const addLabel = document.createElement('label');
+  addLabel.textContent = 'Add feature';
+  const addInput = document.createElement('input');
+  addInput.type = 'text';
+  addInput.placeholder = 'e.g., EV-ready parking';
+  addInput.required = true;
+  addLabel.append(addInput);
+
+  const groupSelect = document.createElement('select');
+  const mustOption = document.createElement('option');
+  mustOption.value = 'must';
+  mustOption.textContent = 'Must-have';
+  const niceOption = document.createElement('option');
+  niceOption.value = 'nice';
+  niceOption.textContent = 'Nice-to-have';
+  groupSelect.append(mustOption, niceOption);
+
+  const addButton = document.createElement('button');
+  addButton.type = 'submit';
+  addButton.className = 'primary-button';
+  addButton.textContent = 'Add';
+
+  addForm.append(addLabel, groupSelect, addButton);
+  wrapper.append(addForm);
+
+  const features = wishlist.features ?? (wishlist.features = { must: [], nice: [] });
+  features.must = Array.isArray(features.must) ? features.must : [];
+  features.nice = Array.isArray(features.nice) ? features.nice : [];
+
+  const normalise = () => {
+    features.must = Array.from(new Set(features.must.filter(Boolean)));
+    features.nice = Array.from(new Set(features.nice.filter(Boolean)));
+    features.nice = features.nice.filter((feature) => !features.must.includes(feature));
+  };
+
+  const renderLists = () => {
+    mustList.innerHTML = '';
+    niceList.innerHTML = '';
+
+    if (!features.must.length) {
+      const empty = document.createElement('li');
+      empty.className = 'wishlist-v2__feature-empty';
+      empty.textContent = 'Add at least one non-negotiable to focus matches.';
+      mustList.append(empty);
+    } else {
+      features.must.forEach((feature) => {
+        mustList.append(createFeatureRow(feature, 'must'));
+      });
+    }
+
+    if (!features.nice.length) {
+      const empty = document.createElement('li');
+      empty.className = 'wishlist-v2__feature-empty';
+      empty.textContent = 'Flexible asks help ranking but do not gate matches.';
+      niceList.append(empty);
+    } else {
+      features.nice.forEach((feature) => {
+        niceList.append(createFeatureRow(feature, 'nice'));
+      });
+    }
+  };
+
+  const createFeatureRow = (feature, group) => {
+    const item = document.createElement('li');
+    item.className = 'wishlist-v2__feature-item';
+
+    const name = document.createElement('span');
+    name.textContent = feature;
+
+    const actions = document.createElement('div');
+    actions.className = 'wishlist-v2__feature-actions';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'ghost-button';
+    toggle.textContent = group === 'must' ? 'Mark nice-to-have' : 'Mark must-have';
+    toggle.addEventListener('click', () => {
+      if (group === 'must') {
+        features.must = features.must.filter((item) => item !== feature);
+        if (!features.nice.includes(feature)) features.nice.push(feature);
+      } else {
+        features.nice = features.nice.filter((item) => item !== feature);
+        if (!features.must.includes(feature)) features.must.push(feature);
+      }
+      normalise();
+      renderLists();
+    });
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'ghost-button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      features.must = features.must.filter((item) => item !== feature);
+      features.nice = features.nice.filter((item) => item !== feature);
+      renderLists();
+    });
+
+    actions.append(toggle, remove);
+    item.append(name, actions);
+    return item;
+  };
+
+  addForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const value = addInput.value.trim();
+    if (!value) return;
+    const group = groupSelect.value === 'nice' ? 'nice' : 'must';
+    if (group === 'must') {
+      if (!features.must.includes(value)) features.must.unshift(value);
+      features.nice = features.nice.filter((item) => item !== value);
+    } else {
+      if (!features.nice.includes(value)) features.nice.unshift(value);
+      features.must = features.must.filter((item) => item !== value);
+    }
+    addInput.value = '';
+    normalise();
+    renderLists();
+  });
+
+  normalise();
+  renderLists();
+  return wrapper;
+}
+
+function formatHintValue(value, prefix) {
+  if (!Number.isFinite(value)) return '—';
+  if (prefix === '$') {
+    return formatCurrency(value);
+  }
+  return `${value}`;
+}
+
 
 function renderWishlistSnapshot(wishlist) {
   const stats = getWishlistStats(wishlist);
@@ -855,60 +1453,230 @@ function renderWishlistPrivacyCard() {
 }
 
 function renderBudgetCoachCard(wishlist) {
-  const market = wishlist.market ?? {};
   const card = document.createElement('article');
   card.className = 'card wishlist-v2__coach-card';
 
   const header = document.createElement('div');
   header.className = 'card-header';
+  const areaLabel = wishlist.market?.area ?? wishlist.locations?.[0]?.label ?? 'selected areas';
   header.innerHTML = `
     <div>
       <h3>Budget Coach & Trends</h3>
-      <p class="section-description">Estimated market range for your wishlist in ${market.area ?? (wishlist.locations?.[0]?.label ?? 'selected areas')}.</p>
+      <p class="section-description">Estimated market range for your wishlist in ${areaLabel}.</p>
     </div>
   `;
   card.append(header);
 
   const body = document.createElement('div');
   body.className = 'card-body wishlist-v2__coach-body';
+  const loading = document.createElement('p');
+  loading.className = 'wishlist-v2__coach-loading';
+  loading.setAttribute('role', 'status');
+  loading.textContent = 'Fetching market trends…';
+  body.append(loading);
+  card.append(body);
 
-  const rangeText = market.estimatedRange
-    ? `${formatCurrency(market.estimatedRange.low)} – ${formatCurrency(market.estimatedRange.high)}`
-    : 'Range pending more comps.';
+  budgetCoachRegistry.set(wishlist.id, { wishlist, body, card });
+  loadBudgetCoachData(wishlist, body);
+
+  return card;
+}
+
+function loadBudgetCoachData(wishlist, container, { force } = {}) {
+  if (!container) return;
+  container.innerHTML = '';
+  const loading = document.createElement('p');
+  loading.className = 'wishlist-v2__coach-loading';
+  loading.setAttribute('role', 'status');
+  loading.textContent = 'Fetching market trends…';
+  container.append(loading);
+
+  fetchMarketTrends(wishlist, { force })
+    .then((data) => {
+      renderBudgetCoachContent(container, data);
+    })
+    .catch((error) => {
+      console.error('Budget coach failed to load', error);
+      const message = document.createElement('p');
+      message.className = 'wishlist-v2__coach-error';
+      message.textContent = 'Unable to load market trends right now.';
+      container.innerHTML = '';
+      container.append(message);
+    });
+}
+
+function requestBudgetCoachRefresh(wishlistId) {
+  const entry = budgetCoachRegistry.get(wishlistId);
+  if (entry) {
+    loadBudgetCoachData(entry.wishlist, entry.body, { force: true });
+  }
+}
+
+async function fetchMarketTrends(wishlist, { force } = {}) {
+  const params = new URLSearchParams();
+  const area = wishlist.locations?.[0]?.label ?? wishlist.market?.area ?? '';
+  const type = wishlist.details?.type ?? '';
+  const min = Number(wishlist.budget?.min);
+  const max = Number(wishlist.budget?.max);
+
+  if (area) params.set('area', area);
+  if (type) params.set('type', type);
+  if (Number.isFinite(min)) params.set('priceMin', String(min));
+  if (Number.isFinite(max)) params.set('priceMax', String(max));
+
+  const cacheKey = `${params.toString() || 'default'}`;
+  if (!force && marketTrendCache.has(cacheKey)) {
+    return marketTrendCache.get(cacheKey);
+  }
+
+  try {
+    if (typeof fetch === 'function') {
+      const response = await fetch(`/market-trends${params.toString() ? `?${params}` : ''}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        const normalised = normaliseMarketTrends(payload, wishlist);
+        marketTrendCache.set(cacheKey, normalised);
+        return normalised;
+      }
+    }
+  } catch (error) {
+    console.warn('Market trends API unavailable, using fallback', error);
+  }
+
+  const fallback = normaliseMarketTrends(wishlist.market ?? {}, wishlist);
+  marketTrendCache.set(cacheKey, fallback);
+  return fallback;
+}
+
+function normaliseMarketTrends(payload = {}, wishlist) {
+  const source = payload.market ?? payload;
+  const area = source.area ?? wishlist.locations?.[0]?.label ?? 'Selected areas';
+  const low = Number(source.estimatedRange?.low ?? source.range?.low ?? source.low ?? source.min);
+  const high = Number(source.estimatedRange?.high ?? source.range?.high ?? source.high ?? source.max);
+  const estimatedRange = {
+    low: Number.isFinite(low) ? low : Number(wishlist.market?.estimatedRange?.low) || null,
+    high: Number.isFinite(high) ? high : Number(wishlist.market?.estimatedRange?.high) || null,
+  };
+
+  const payments = source.payments ?? {};
+  const today = payments.today ?? {};
+  const stress = payments.stress ?? {};
+
+  if (!today.amount && Number.isFinite(today.value)) {
+    today.amount = formatCurrency(today.value);
+  }
+  if (!stress.amount && Number.isFinite(stress.value)) {
+    stress.amount = formatCurrency(stress.value);
+  }
+
+  const average = Number.isFinite(estimatedRange.low) && Number.isFinite(estimatedRange.high)
+    ? Math.round((estimatedRange.low + estimatedRange.high) / 2)
+    : null;
+
+  const fallbackToday = wishlist.market?.paymentEstimate;
+  const fallbackStress = wishlist.market?.stressEstimate;
+
+  const todayPayment = {
+    label: today.label ?? "Today's indicative", 
+    amount: today.amount ?? fallbackToday ?? (average ? `${formatCurrency(average)} · est. principal & interest` : 'Add mortgage inputs to see payments.'),
+    rate: today.rate ?? payments.todayRate ?? null,
+  };
+
+  const stressPayment = {
+    label: stress.label ?? 'OSFI MQR',
+    amount: stress.amount ?? fallbackStress ?? (average ? `${formatCurrency(Math.round(average * 1.05))} · stress tested` : 'Add mortgage inputs to see stress test.'),
+    rate: stress.rate ?? payments.stressRate ?? null,
+  };
+
+  const trendValues = Array.isArray(source.trend?.values)
+    ? source.trend.values
+    : Array.isArray(wishlist.market?.trend?.values)
+      ? wishlist.market.trend.values
+      : [];
+  const trendChange = source.trend?.change ?? wishlist.market?.trend?.change ?? '—';
+
+  const sources = Array.isArray(source.sources) && source.sources.length
+    ? source.sources
+    : Array.isArray(wishlist.market?.sources)
+      ? wishlist.market.sources
+      : [];
+
+  const commentary = source.commentary ?? wishlist.market?.commentary ?? 'Trend commentary will populate as datasets refresh.';
+
+  return {
+    area,
+    estimatedRange,
+    payments: { today: todayPayment, stress: stressPayment },
+    trend: { change: trendChange, values: trendValues },
+    sources,
+    commentary,
+  };
+}
+
+function renderBudgetCoachContent(container, data) {
+  container.innerHTML = '';
+
   const range = document.createElement('p');
   range.className = 'wishlist-v2__coach-range';
+  const low = Number.isFinite(data.estimatedRange.low) ? formatCurrency(data.estimatedRange.low) : null;
+  const high = Number.isFinite(data.estimatedRange.high) ? formatCurrency(data.estimatedRange.high) : null;
+  const rangeText = low && high ? `${low} – ${high}` : 'Range pending more comps.';
   range.innerHTML = `<span>Estimated range</span> ${rangeText}`;
 
-  const payment = document.createElement('p');
-  payment.className = 'wishlist-v2__coach-payment';
-  payment.innerHTML = `<span>Payment estimate</span> ${market.paymentEstimate ?? 'Add mortgage inputs to see payments.'}`;
+  const payments = document.createElement('div');
+  payments.className = 'wishlist-v2__coach-payments';
+  payments.append(createPaymentTile(data.payments.today), createPaymentTile(data.payments.stress));
 
   const trendWrapper = document.createElement('div');
   trendWrapper.className = 'wishlist-v2__coach-trend';
 
   const trendHeader = document.createElement('div');
   trendHeader.className = 'wishlist-v2__coach-trend-header';
-  trendHeader.innerHTML = `<span>12-month trend</span><strong>${market.trend?.change ?? '—'}</strong>`;
+  trendHeader.innerHTML = `<span>12-month trend</span><strong>${data.trend.change ?? '—'}</strong>`;
 
-  const sparkline = createSparkline(market.trend?.values);
+  const sparkline = createSparkline(data.trend.values);
   sparkline.classList.add('wishlist-v2__sparkline');
 
   const sources = document.createElement('div');
   sources.className = 'wishlist-v2__coach-sources';
-  if (Array.isArray(market.sources) && market.sources.length) {
-    sources.innerHTML = market.sources.map((source) => `<span class="badge badge--outline">${source}</span>`).join('');
+  if (Array.isArray(data.sources) && data.sources.length) {
+    data.sources.forEach((source) => {
+      const badge = document.createElement('span');
+      badge.className = 'badge badge--outline';
+      badge.textContent = source;
+      sources.append(badge);
+    });
   }
 
   trendWrapper.append(trendHeader, sparkline, sources);
 
   const commentary = document.createElement('p');
   commentary.className = 'wishlist-v2__coach-commentary';
-  commentary.textContent = market.commentary ?? 'Trend commentary will populate as datasets refresh.';
+  commentary.textContent = data.commentary ?? 'Trend commentary will populate as datasets refresh.';
 
-  body.append(range, payment, trendWrapper, commentary);
-  card.append(body);
+  container.append(range, payments, trendWrapper, commentary);
+}
 
-  return card;
+function createPaymentTile(info = {}) {
+  const tile = document.createElement('div');
+  tile.className = 'wishlist-v2__coach-payment-tile';
+  const label = document.createElement('span');
+  label.className = 'wishlist-v2__coach-payment-label';
+  label.textContent = info.label ?? 'Payment';
+  const amount = document.createElement('strong');
+  amount.className = 'wishlist-v2__coach-payment-amount';
+  amount.textContent = info.amount ?? '—';
+  const rate = document.createElement('small');
+  rate.className = 'wishlist-v2__coach-payment-rate';
+  if (info.rate) {
+    rate.textContent = `@ ${info.rate}`;
+  } else {
+    rate.textContent = '';
+  }
+  tile.append(label, amount, rate);
+  return tile;
 }
 
 function formatBudgetBand(budget = {}) {
@@ -926,19 +1694,6 @@ function formatBudgetBand(budget = {}) {
     return `Up to ${formatCurrency(max)}`;
   }
   return 'Flexible';
-}
-
-function renderWishlistFilterField(label, value) {
-  const field = document.createElement('label');
-  field.className = 'wishlist-v2__filter-field';
-  const title = document.createElement('span');
-  title.textContent = label;
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = value ?? '—';
-  input.readOnly = true;
-  field.append(title, input);
-  return field;
 }
 
 function getWishlistStats(wishlist) {
@@ -1046,81 +1801,569 @@ function createSparkline(values) {
   return wrapper;
 }
 
-function getRegionsForWishlist(wishlist) {
-  const fallbackLat = 49.2827;
-  const fallbackLng = -123.1207;
-  const locations = Array.isArray(wishlist.locations) ? wishlist.locations : [];
-  return locations.map((location, index) => {
-    const region = buyerMapRegions.find((candidate) =>
-      location.label?.toLowerCase?.().includes(candidate.label.toLowerCase()),
-    );
-    if (region) {
-      return {
-        ...region,
-        count: Number.isFinite(location.count) ? location.count : region.count,
-        priority: location.priority ?? 1,
-      };
-    }
-    return {
-      id: location.id ?? `fallback-${index}`,
-      label: location.label ?? `Focus area ${index + 1}`,
-      count: Number.isFinite(location.count) ? location.count : 0,
-      lat: fallbackLat + index * 0.01,
-      lng: fallbackLng - index * 0.01,
-      priority: location.priority ?? 1,
-    };
-  });
-}
-
-function initWishlistMap(mapId, wishlist) {
+function initWishlistMap(mapId, wishlist, options = {}) {
   setTimeout(() => {
     const container = document.getElementById(mapId);
     if (!container) return;
 
-    const regions = getRegionsForWishlist(wishlist).filter(
-      (region) => Number.isFinite(region.lat) && Number.isFinite(region.lng),
-    );
+    const { areaManager, areaList, areaPills } = options;
+    const selection = ensureWishlistSelection(wishlist);
+    selection.wishlist = wishlist;
+    selection.areaPills = areaPills;
 
-    if (typeof L === 'undefined' || !regions.length) {
-      container.textContent = 'Add areas to visualise coverage.';
+    const renderState = (focusId) => {
+      updateAreaSummaryPills(areaPills, selection.areas);
+      renderAreaList(areaList, selection, focusId);
+      syncWishlistLocations(wishlist, selection);
+    };
+
+    const initialiseManager = (mapInstance) => {
+      if (areaManager && !areaManager.dataset.initialised) {
+        areaManager.dataset.initialised = 'true';
+        setupAreaManager(areaManager, mapInstance, selection, renderState);
+      }
+      renderState();
+    };
+
+    if (typeof L === 'undefined') {
+      container.textContent = 'Map preview unavailable offline. Use suggestions to add areas.';
       container.classList.add('wishlist-v2__map--empty');
+      initialiseManager(undefined);
       return;
     }
 
-    const existing = container.dataset.initialised;
-    if (existing) return;
+    if (container.dataset.initialised) {
+      initialiseManager(container._wishlistMapInstance);
+      return;
+    }
+
     container.dataset.initialised = 'true';
 
-    const centerLat = regions.reduce((sum, region) => sum + region.lat, 0) / regions.length;
-    const centerLng = regions.reduce((sum, region) => sum + region.lng, 0) / regions.length;
+    const center = computeCentroid(
+      selection.areas.map((area) => [area.center?.lat ?? fallbackMapCenter.lat, area.center?.lng ?? fallbackMapCenter.lng]),
+    );
 
     const map = L.map(mapId, {
       zoomControl: true,
       scrollWheelZoom: false,
       doubleClickZoom: false,
-    }).setView([centerLat, centerLng], 12);
+    }).setView([center.lat, center.lng], 12);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 18,
     }).addTo(map);
 
-    regions.forEach((region) => {
-      const radius = 12 + Math.min(18, (region.count ?? 0) * 0.8);
-      const marker = L.circleMarker([region.lat, region.lng], {
-        radius,
-        color: '#2563eb',
-        weight: 2,
-        fillColor: '#60a5fa',
-        fillOpacity: 0.35,
-      }).addTo(map);
-      marker.bindTooltip(
-        `${region.label}<br>${region.count ?? 0} matched homes` +
-          (region.priority ? `<br>Priority ${region.priority}` : ''),
-        { permanent: false, direction: 'top' },
-      );
+    const layerGroup = L.featureGroup().addTo(map);
+    selection.layerGroup = layerGroup;
+
+    selection.areas.forEach((area) => {
+      attachAreaLayer(map, selection, area);
     });
+
+    container._wishlistMapInstance = map;
+    initialiseManager(map);
   }, 60);
+}
+
+function attachAreaLayer(map, selection, area) {
+  if (typeof L === 'undefined' || !map) {
+    area.layer = null;
+    return;
+  }
+
+  if (area.layer && map.hasLayer(area.layer)) {
+    area.layer.removeFrom(map);
+  }
+
+  const style = getAreaStyle(area);
+  let layer;
+
+  if (area.type === 'polygon' && Array.isArray(area.geometry)) {
+    layer = L.polygon(area.geometry, style);
+  } else if (area.type === 'radius') {
+    layer = L.circle(area.center ?? fallbackMapCenter, {
+      ...style,
+      radius: area.radius ?? 600,
+    });
+  } else {
+    layer = L.circleMarker(area.center ?? fallbackMapCenter, {
+      ...style,
+      radius: 10 + area.weight * 2,
+    });
+  }
+
+  layer.addTo(selection.layerGroup ?? map);
+  if (layer.bindTooltip) {
+    const tooltip = `${area.label}<br>Priority ${area.weight}` +
+      (Number.isFinite(area.count) && area.count > 0 ? `<br>${area.count} matched homes` : '');
+    layer.bindTooltip(tooltip, { permanent: false, direction: 'top' });
+  }
+
+  layer.on('click', (event) => {
+    event.originalEvent?.preventDefault?.();
+    event.originalEvent?.stopPropagation?.();
+    if (area._focusNode) {
+      area._focusNode.focus();
+    }
+  });
+
+  area.layer = layer;
+}
+
+function getAreaStyle(area) {
+  const intensity = 0.18 + area.weight * 0.08;
+  return {
+    color: '#1d4ed8',
+    weight: 1 + area.weight,
+    fillColor: '#3b82f6',
+    fillOpacity: Math.min(0.65, intensity),
+    opacity: 0.9,
+    interactive: true,
+  };
+}
+
+function updateAreaLayer(area) {
+  if (!area.layer) return;
+  const style = getAreaStyle(area);
+  if (area.layer.setStyle) {
+    area.layer.setStyle(style);
+  }
+  if (typeof area.layer.setRadius === 'function' && area.type !== 'polygon') {
+    area.layer.setRadius(area.radius ?? 600);
+  }
+}
+
+function renderAreaList(container, selection, focusId) {
+  if (!container) return;
+  container.innerHTML = '';
+
+  const areas = selection?.areas ?? [];
+  if (!areas.length) {
+    const empty = document.createElement('p');
+    empty.className = 'section-description';
+    empty.textContent = 'No custom areas yet. Draw on the map or use search to add MLS-style polygons.';
+    container.append(empty);
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'wishlist-v2__area-items';
+  list.setAttribute('role', 'list');
+
+  areas.forEach((area) => {
+    const item = document.createElement('li');
+    item.className = 'wishlist-v2__area-item';
+
+    const header = document.createElement('div');
+    header.className = 'wishlist-v2__area-item-header';
+
+    const labelField = document.createElement('label');
+    labelField.className = 'wishlist-v2__area-label';
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.value = area.label;
+    labelInput.setAttribute('aria-label', 'Area label');
+    labelInput.addEventListener('input', () => {
+      area.label = labelInput.value;
+      scheduleFrame(() => {
+        const pills = selection.areaPills ?? container.closest('.wishlist-v2__map-panel')?.querySelector('.wishlist-v2__area-pills');
+        updateAreaSummaryPills(pills, areas);
+        syncWishlistLocations(selection.wishlist, selection);
+      });
+      if (area.layer?.bindTooltip) {
+        const tooltip = `${area.label}<br>Priority ${area.weight}` +
+          (Number.isFinite(area.count) && area.count > 0 ? `<br>${area.count} matched homes` : '');
+        area.layer.bindTooltip(tooltip, { permanent: false, direction: 'top' });
+      }
+    });
+    labelField.append(labelInput);
+
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'badge badge--outline wishlist-v2__area-type';
+    typeBadge.textContent = area.type === 'radius' ? 'Radius' : area.type === 'polygon' ? 'Polygon' : 'Pin';
+
+    header.append(labelField, typeBadge);
+
+    const controls = document.createElement('div');
+    controls.className = 'wishlist-v2__area-controls';
+
+    const weightLabel = document.createElement('label');
+    weightLabel.className = 'wishlist-v2__area-weight';
+    weightLabel.textContent = 'Priority';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '1';
+    slider.max = '5';
+    slider.value = area.weight;
+    slider.setAttribute('aria-valuemin', '1');
+    slider.setAttribute('aria-valuemax', '5');
+    slider.setAttribute('aria-valuenow', String(area.weight));
+    slider.setAttribute('aria-label', `Priority for ${area.label}`);
+
+    const sliderValue = document.createElement('span');
+    sliderValue.className = 'wishlist-v2__area-weight-value';
+    sliderValue.textContent = area.weight;
+
+    slider.addEventListener('input', () => {
+      const value = clamp(slider.value, 1, 5);
+      sliderValue.textContent = value;
+      slider.setAttribute('aria-valuenow', String(value));
+      area.weight = value;
+      updateAreaLayer(area);
+      scheduleFrame(() => {
+        const pills = selection.areaPills ?? container.closest('.wishlist-v2__map-panel')?.querySelector('.wishlist-v2__area-pills');
+        updateAreaSummaryPills(pills, areas);
+        syncWishlistLocations(selection.wishlist, selection);
+      });
+    });
+
+    weightLabel.append(slider, sliderValue);
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'ghost-button wishlist-v2__area-remove';
+    removeButton.textContent = 'Remove';
+    removeButton.addEventListener('click', () => {
+      if (area.layer) {
+        area.layer.remove();
+      }
+      const index = selection.areas.findIndex((candidate) => candidate.id === area.id);
+      if (index >= 0) {
+        selection.areas.splice(index, 1);
+      }
+      renderAreaList(container, selection);
+      const pills = selection.areaPills ?? container.closest('.wishlist-v2__map-panel')?.querySelector('.wishlist-v2__area-pills');
+      updateAreaSummaryPills(pills, selection.areas);
+      syncWishlistLocations(selection.wishlist, selection);
+    });
+
+    controls.append(weightLabel, removeButton);
+
+    if (Number.isFinite(area.count) && area.count > 0) {
+      const countTag = document.createElement('span');
+      countTag.className = 'wishlist-v2__area-count';
+      countTag.textContent = `${area.count} matches`;
+      controls.append(countTag);
+    }
+
+    item.append(header, controls);
+    list.append(item);
+
+    area._focusNode = labelInput;
+    if (focusId && focusId === area.id) {
+      scheduleFrame(() => labelInput.focus());
+    }
+  });
+
+  container.append(list);
+}
+
+function setupAreaManager(container, map, selection, onStateChange) {
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  const controls = document.createElement('div');
+  controls.className = 'wishlist-v2__draw-controls';
+
+  const polygonButton = document.createElement('button');
+  polygonButton.type = 'button';
+  polygonButton.className = 'ghost-button wishlist-v2__draw-btn';
+  polygonButton.textContent = 'Draw polygon';
+
+  const radiusButton = document.createElement('button');
+  radiusButton.type = 'button';
+  radiusButton.className = 'ghost-button wishlist-v2__draw-btn';
+  radiusButton.textContent = 'Draw radius';
+
+  const finishButton = document.createElement('button');
+  finishButton.type = 'button';
+  finishButton.className = 'ghost-button wishlist-v2__draw-finish';
+  finishButton.textContent = 'Finish shape';
+  finishButton.disabled = true;
+
+  const cancelButton = document.createElement('button');
+  cancelButton.type = 'button';
+  cancelButton.className = 'ghost-button wishlist-v2__draw-cancel';
+  cancelButton.textContent = 'Cancel';
+  cancelButton.disabled = true;
+
+  controls.append(polygonButton, radiusButton, finishButton, cancelButton);
+  container.append(controls);
+
+  const instructions = document.createElement('p');
+  instructions.className = 'wishlist-v2__draw-instructions';
+  instructions.setAttribute('role', 'status');
+  instructions.setAttribute('aria-live', 'polite');
+  const drawingAvailable = Boolean(map);
+  const defaultInstruction = drawingAvailable
+    ? 'Select a draw mode to add more areas.'
+    : 'Drawing tools require the map. Search areas to add them manually.';
+  instructions.textContent = defaultInstruction;
+  container.append(instructions);
+
+  const radiusWrapper = document.createElement('label');
+  radiusWrapper.className = 'wishlist-v2__radius-control';
+  radiusWrapper.textContent = 'Radius (m)';
+  const radiusInput = document.createElement('input');
+  radiusInput.type = 'range';
+  radiusInput.min = '150';
+  radiusInput.max = '3000';
+  radiusInput.step = '50';
+  radiusInput.value = '600';
+  radiusInput.disabled = true;
+  const radiusValue = document.createElement('span');
+  radiusValue.textContent = '600 m';
+  radiusWrapper.append(radiusInput, radiusValue);
+  radiusWrapper.hidden = true;
+  container.append(radiusWrapper);
+
+  const searchForm = document.createElement('form');
+  searchForm.className = 'wishlist-v2__area-search';
+  const searchLabel = document.createElement('label');
+  searchLabel.textContent = 'Search MLS-style areas';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.placeholder = 'Neighbourhoods, polygons, school zones…';
+  searchInput.setAttribute('aria-label', 'Search areas');
+  searchLabel.append(searchInput);
+  searchForm.append(searchLabel);
+  container.append(searchForm);
+
+  const suggestionList = document.createElement('ul');
+  suggestionList.className = 'wishlist-v2__area-suggestions';
+  suggestionList.setAttribute('role', 'listbox');
+  container.append(suggestionList);
+
+  if (!drawingAvailable) {
+    polygonButton.disabled = true;
+    polygonButton.setAttribute('aria-disabled', 'true');
+    radiusButton.disabled = true;
+    radiusButton.setAttribute('aria-disabled', 'true');
+    finishButton.disabled = true;
+    cancelButton.disabled = true;
+  }
+
+  const drawState = {
+    mode: null,
+    points: [],
+    tempLayer: null,
+    center: null,
+    radius: 600,
+  };
+
+  const resetDrawing = (shouldClearTemp = true) => {
+    drawState.mode = null;
+    drawState.points = [];
+    drawState.center = null;
+    drawState.radius = 600;
+    radiusInput.value = '600';
+    radiusValue.textContent = '600 m';
+    radiusInput.disabled = true;
+    radiusWrapper.hidden = true;
+    finishButton.disabled = true;
+    cancelButton.disabled = true;
+    polygonButton.classList.remove('is-active');
+    polygonButton.setAttribute('aria-pressed', 'false');
+    radiusButton.classList.remove('is-active');
+    radiusButton.setAttribute('aria-pressed', 'false');
+    instructions.textContent = defaultInstruction;
+    if (shouldClearTemp && drawState.tempLayer && map && map.hasLayer(drawState.tempLayer)) {
+      drawState.tempLayer.remove();
+    }
+    drawState.tempLayer = null;
+  };
+
+  const startDrawing = (mode) => {
+    if (!drawingAvailable) return;
+    if (drawState.mode === mode) {
+      resetDrawing();
+      return;
+    }
+    resetDrawing();
+    drawState.mode = mode;
+    cancelButton.disabled = false;
+    if (mode === 'polygon') {
+      instructions.textContent = 'Click on the map to outline your polygon. Use Finish when complete.';
+      polygonButton.classList.add('is-active');
+      polygonButton.setAttribute('aria-pressed', 'true');
+    } else if (mode === 'radius') {
+      instructions.textContent = 'Click once to set the center. Adjust radius then finish to save it.';
+      radiusButton.classList.add('is-active');
+      radiusButton.setAttribute('aria-pressed', 'true');
+      radiusWrapper.hidden = false;
+      radiusInput.disabled = false;
+    }
+  };
+
+  const finalizePolygon = () => {
+    if (!drawState.points.length || drawState.points.length < 3) return;
+    const geometry = drawState.points.map((point) => [point.lat, point.lng]);
+    const area = {
+      id: generateId('wishlist-area'),
+      label: `Custom polygon ${selection.areas.length + 1}`,
+      type: 'polygon',
+      weight: 3,
+      geometry,
+      center: computeCentroid(geometry),
+      count: 0,
+    };
+    selection.areas.push(area);
+    if (map) {
+      attachAreaLayer(map, selection, area);
+    }
+    resetDrawing();
+    onStateChange?.(area.id);
+  };
+
+  const finalizeRadius = () => {
+    if (!drawState.center) return;
+    const area = {
+      id: generateId('wishlist-area'),
+      label: `Radius area ${selection.areas.length + 1}`,
+      type: 'radius',
+      weight: 3,
+      center: { lat: drawState.center.lat, lng: drawState.center.lng },
+      radius: drawState.radius,
+      count: 0,
+    };
+    selection.areas.push(area);
+    if (map) {
+      attachAreaLayer(map, selection, area);
+      map.flyTo([area.center.lat, area.center.lng], 13);
+    }
+    resetDrawing();
+    onStateChange?.(area.id);
+  };
+
+  const handleMapClick = (event) => {
+    if (!drawState.mode) return;
+    if (drawState.mode === 'polygon') {
+      drawState.points.push(event.latlng);
+      if (!drawState.tempLayer) {
+        drawState.tempLayer = L.polygon(drawState.points, {
+          ...getAreaStyle({ weight: 3 }),
+          dashArray: '6 6',
+          fillOpacity: 0.1,
+        }).addTo(map);
+      } else {
+        drawState.tempLayer.setLatLngs(drawState.points);
+      }
+      finishButton.disabled = drawState.points.length < 3;
+    } else if (drawState.mode === 'radius') {
+      drawState.center = event.latlng;
+      if (!drawState.tempLayer) {
+        drawState.tempLayer = L.circle(drawState.center, {
+          ...getAreaStyle({ weight: 3 }),
+          dashArray: '6 6',
+          fillOpacity: 0.1,
+          radius: drawState.radius,
+        }).addTo(map);
+      } else {
+        drawState.tempLayer.setLatLng(drawState.center);
+      }
+      finishButton.disabled = false;
+      instructions.textContent = 'Drag the radius slider if needed, then choose Finish shape to save it.';
+    }
+  };
+
+  if (map) {
+    map.on('click', handleMapClick);
+  }
+
+  polygonButton.addEventListener('click', () => startDrawing('polygon'));
+  radiusButton.addEventListener('click', () => startDrawing('radius'));
+
+  finishButton.addEventListener('click', () => {
+    if (drawState.mode === 'polygon') {
+      finalizePolygon();
+    } else if (drawState.mode === 'radius') {
+      finalizeRadius();
+    }
+  });
+
+  cancelButton.addEventListener('click', () => resetDrawing());
+
+  radiusInput.addEventListener('input', () => {
+    const value = clamp(Number(radiusInput.value), 150, 3000);
+    drawState.radius = value;
+    radiusValue.textContent = `${value} m`;
+    if (drawState.tempLayer && typeof drawState.tempLayer.setRadius === 'function') {
+      drawState.tempLayer.setRadius(value);
+    }
+  });
+
+  let currentSuggestions = [];
+  const renderSuggestions = (suggestions) => {
+    currentSuggestions = suggestions;
+    suggestionList.innerHTML = '';
+    if (!suggestions.length) {
+      const empty = document.createElement('li');
+      empty.className = 'wishlist-v2__area-suggestion-empty';
+      empty.textContent = 'No areas found. Try a different keyword.';
+      suggestionList.append(empty);
+      return;
+    }
+    suggestions.forEach((suggestion, index) => {
+      const item = document.createElement('li');
+      item.className = 'wishlist-v2__area-suggestion';
+      item.setAttribute('role', 'option');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = `${suggestion.label} · ${suggestion.type ?? 'radius'}`;
+      if (Number.isFinite(suggestion.count) && suggestion.count > 0) {
+        button.textContent += ` · ${suggestion.count} matches`;
+      }
+      button.addEventListener('click', () => {
+        const area = createAreaFromSuggestion(suggestion, selection.areas.length);
+        selection.areas.push(area);
+        if (map) {
+          attachAreaLayer(map, selection, area);
+          map.flyTo([area.center.lat, area.center.lng], 13);
+        }
+        suggestionList.innerHTML = '';
+        searchInput.value = '';
+        resetDrawing();
+        onStateChange?.(area.id);
+      });
+      item.append(button);
+      if (index === 0) {
+        item.dataset.default = 'true';
+      }
+      suggestionList.append(item);
+    });
+  };
+
+  const debouncedSearch = debounce(async (query) => {
+    if (!query || query.trim().length < 2) {
+      suggestionList.innerHTML = '';
+      return;
+    }
+    const suggestions = await fetchAreaSuggestions(query.trim());
+    renderSuggestions(suggestions);
+  }, 250);
+
+  searchInput.addEventListener('input', () => {
+    debouncedSearch(searchInput.value);
+  });
+
+  searchForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (currentSuggestions.length) {
+      const first = currentSuggestions[0];
+      const area = createAreaFromSuggestion(first, selection.areas.length);
+      selection.areas.push(area);
+      if (map) {
+        attachAreaLayer(map, selection, area);
+        map.flyTo([area.center.lat, area.center.lng], 13);
+      }
+      suggestionList.innerHTML = '';
+      searchInput.value = '';
+      resetDrawing();
+      onStateChange?.(area.id);
+    }
+  });
 }
 
 function summarizeOwnerExpectation(wishlist, match) {
