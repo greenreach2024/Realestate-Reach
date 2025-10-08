@@ -125,6 +125,23 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 - Keep Azure Maps as the base map provider and render neighbourhood polygons as custom vector layers on top of it.
 - Exclude MLS® board proprietary areas/districts unless explicit licensing is obtained; they must not appear in search or analytics.
 
+#### Layer A ingestion specifics
+- **Toronto** – Pull the latest "Neighbourhoods" feature layer from the City's ArcGIS instance. Preserve all 158 canonical names, the numeric ID, and alternative labels provided in the dataset. Jobs run nightly to detect schema changes, dedupe by `OBJECTID`, and retain the licensing metadata string in the `license` column.
+- **Vancouver** – Import the "Local Area Boundary" dataset (22 planning areas) from the City of Vancouver open data portal. Persist the `name`, `id`, and bilingual labels, and tag the features with `source="city_of_vancouver"`. Because polygons are authoritative, treat them as the default snap-to geometry for autosuggest and map hover behaviour.
+- **Montréal** – Sync the "Quartiers de référence en habitation" polygons via the municipal open data API. Store both French and English names when available and track the revision timestamp from the feed so that downstream caches can be invalidated after each update cycle.
+
+Each municipal import follows the same ETL shape: download → convert to GeoJSON → normalise projection to EPSG:4326 → upsert into PostGIS using stable IDs → refresh the Elasticsearch geo index and CDN cache manifests. Publish the ingestion pipeline as an idempotent Terraform + GitHub Actions workflow so we can schedule nightly runs and manual replays.
+
+#### Layer B – OpenStreetMap fallback
+- For cities without municipal coverage, hydrate areas from OSM Overpass queries scoped by the municipal boundary. Collect `place=neighbourhood`, `place=suburb`, `place=quarter`, and `place=locality` polygons. When only centroids exist, expand with buffered radii (configurable per metro) and mark them as `geometry_type="derived_buffer"`.
+- Maintain a lightweight import of provincial Geofabrik PBF extracts to seed the PostGIS database in bulk. Use osm2pgsql to ingest and tag features with `source="osm"`, linking back to the original `osm_id` for auditability.
+- Autosuggest responses must prioritise Layer A records first, then surface OSM-backed options grouped under a "Community-named areas" header so that the UI can differentiate reliability tiers.
+
+#### API contract updates
+- Expose `GET /areas/suggest?q={query}&city={slug}` to serve up to 20 matches ordered by data tier, proximity to the supplied map centroid (if provided), and textual relevance. Responses include `id`, `name`, `source`, `centroid`, and a simplified polygon when the client requests `includeGeometry=true`.
+- Expand `GET /areas/{id}` to return raw geometry (GeoJSON), licensing information, and lineage metadata (`ingested_at`, `source_url`, `source_feature_id`).
+- Cache suggestions for five minutes per city/query to protect upstream services while still reflecting nightly import updates.
+
 ## 4. Access & Gating Rules
 - Central guard middleware checks both role and subscription tier before returning protected data or enabling messaging actions.
 - UI surfaces gating with disabled buttons and contextual tooltips (`Upgrade to contact buyers`).
