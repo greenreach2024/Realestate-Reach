@@ -3,7 +3,6 @@ import {
   buyerMapRegions,
   propertyProfiles,
   sellerHotspots,
-  sellerAnalytics,
   agents,
   mortgageLeads,
   notifications,
@@ -35,11 +34,23 @@ function canMessage() {
 
 // Lightweight adapter (mock). Replace with /api/matches/property/:id/summary later.
 function getPropertyMatchSummary(profile) {
-  const base = Math.max(6, (profile?.beds || 3) + (profile?.baths || 2) + (profile?.features?.length || 2));
-  const matches = (profile?.matchedBuyers ?? base + Math.floor(Math.random() * 8));
-  const topScore = profile?.matchScore ?? Math.min(96, 60 + Math.floor(Math.random() * 35));
-  const gaps = profile?.gapHint ? [profile.gapHint] : ['Most buyers want 3 baths; this profile has 2'];
-  const snippet = profile?.topWishlistSnippet || '3‑bed detached under $700K · Near schools';
+  if (!profile) {
+    return { matches: 0, topScore: 0, gaps: [], snippet: '' };
+  }
+
+  const snapshot = profile.demandSnapshot || {};
+  const matches = Number.isFinite(snapshot.matchCount)
+    ? snapshot.matchCount
+    : (profile.matchedBuyers ?? 0);
+  const topScore = Number.isFinite(snapshot.topMatch)
+    ? snapshot.topMatch
+    : (profile.matchScore ?? 0);
+  const gaps = Array.isArray(profile.gapInsights) && profile.gapInsights.length
+    ? profile.gapInsights
+    : (profile.gapHint ? [profile.gapHint] : []);
+  const snippet = profile.topWishlistSnippet
+    || 'Matching buyers surface as wishlists are published. Upgrade to see anonymised snippets.';
+
   return { matches, topScore, gaps, snippet };
 }
 
@@ -666,136 +677,695 @@ function renderBuyerNotifications(buyer) {
 }
 
 function renderSellerExperience() {
-  const section = createSection({
-    title: 'Seller dashboard · My Home Profile',
-    description: 'You can maintain one private Home Profile. See nearby buyer demand within 10km and how closely buyers align to your home based on the details you provide. The platform publishes demand, not supply.',
-  });
+  const container = document.createElement('div');
+  container.className = 'property-profile';
 
-  // Determine the seller's single home profile (first entry in propertyProfiles)
   const home = (propertyProfiles || [])[0];
 
-  // Demand heatmap (larger catchment overview)
-  const hotspots = sellerHotspots || [];
-  const mappedRegions = hotspots.map((hotspot) => ({ ...hotspot, count: hotspot?.buyers || 0 }));
-  const mapCard = renderMapCard({
-    title: 'Regional buyer demand',
-    description: 'Hover to view the number of buyers searching each region right now. This is an aggregate, privacy-safe view.',
-    regions: mappedRegions,
-    formatter: (region) => `${region?.count || 0} buyers searching here`,
-    emptyCopy: 'Set your approximate location to reveal demand hotspots and nearby buyer counts.',
-  });
-  section.append(mapCard);
-
-  // My Home Profile summary (no multi-property listing)
-  const profileCard = document.createElement('article');
-  profileCard.className = 'card';
   if (!home) {
-    profileCard.innerHTML = `
-      <div class="card-header">
-        <div>
-          <h3>My Home Profile</h3>
-          <p class="section-description">Add your home details to see buyer alignment in your area.</p>
-        </div>
-      </div>
-      <div class="card-body">
-        ${createEmptyState('No home profile yet — add approximate location, bed/bath, and features to unlock analytics.').outerHTML}
-      </div>
-      <footer class="card-footer">
-        <button class="primary-button" id="add-home-btn">Create Home Profile</button>
-      </footer>
-    `;
-  } else {
-    const summary = getPropertyMatchSummary(home);
-    profileCard.innerHTML = `
-      <div class="card-header">
-        <div>
-          <h3>${home.nickname || 'My Home Profile'}</h3>
-          <p class="section-description">${home.location || 'Approximate location set'}</p>
-        </div>
-        <span class="badge">${Math.round(summary.topScore || 0)}%</span>
-      </div>
-      <div class="card-body">
-        <p>${home.summary || ''}</p>
-        <dl class="detail-grid">
-          <div><dt>Matching buyers</dt><dd>${summary.matches}</dd></div>
-          <div><dt>Top alignment</dt><dd>${Math.round(summary.topScore || 0)}%</dd></div>
-        </dl>
-        <p class="section-description">We found matching buyers based on your submitted details. Upgrade to view anonymized wishlist snippets.</p>
-      </div>
-      <footer class="card-footer">
-        <button class="ghost-button" id="view-home-insights">View insights</button>
-        <button class="primary-button" id="home-message-btn">${canMessage() ? 'Message matched buyers' : 'Upgrade to contact buyers'}</button>
-      </footer>
-    `;
-    profileCard.querySelector('#view-home-insights')?.addEventListener('click', () => openPropertyInsights(home));
-    const msgBtn = profileCard.querySelector('#home-message-btn');
-    if (msgBtn) {
-      if (!canMessage()) {
-        msgBtn.addEventListener('click', () => openUpgradePrompt());
-      } else {
-        msgBtn.addEventListener('click', () => openChat(`property-${home.id}`, 'Matched buyers'));
-      }
-    }
+    const emptySection = createSection({
+      title: 'Property profile (v2)',
+      description: 'Add your property to unlock buyer demand analytics and match-based messaging.',
+    });
+    const emptyBody = document.createElement('div');
+    emptyBody.className = 'card-body';
+    emptyBody.append(createEmptyState('No property profile yet — add address, specs, and key features to surface matching buyers.'));
+    emptySection.append(emptyBody);
+    container.append(emptySection);
+    return container;
   }
-  section.append(profileCard);
 
-  // 10km radius buyer stats centred on the seller's home
-  const nearbyCard = document.createElement('article');
-  nearbyCard.className = 'card';
-  const counts = compute10kmBuyerStats(home, hotspots);
-  nearbyCard.innerHTML = `
-    <div class="card-header">
-      <div>
-        <h3>Buyers within 10km</h3>
-        <p class="section-description">Counts and alignment based on your home details (privacy-safe aggregation).</p>
-      </div>
-      <span class="badge">${counts.total} buyers</span>
-    </div>
-    <div class="card-body">
-      <ul class="detail-list">
-        <li><strong>Strong alignment (≥80%)</strong>: ${counts.strong}</li>
-        <li><strong>Moderate (60–79%)</strong>: ${counts.moderate}</li>
-        <li><strong>Explorers (<60%)</strong>: ${counts.low}</li>
-      </ul>
-    </div>
+  container.append(
+    renderPropertyHero(home),
+    renderDemandSnapshotSection(home),
+    renderWishlistFitSection(home),
+    renderBuyerMatchesSection(home),
+    renderFeatureFitSection(home),
+    renderPricePositioningSection(home),
+    renderDemandMapSection(home),
+    renderSellerActionPanel(home),
+  );
+
+  return container;
+}
+
+function renderPropertyHero(home) {
+  const section = document.createElement('section');
+  section.className = 'section property-hero';
+
+  const details = document.createElement('div');
+  details.className = 'property-hero__details';
+
+  const header = document.createElement('header');
+  header.className = 'property-hero__header';
+  const headerText = document.createElement('div');
+  headerText.innerHTML = `
+    <p class="eyebrow">Property profile · seller view</p>
+    <h2>${home.nickname || 'Property profile'}</h2>
+    <p class="section-description">${home.address || home.location || 'Location withheld for privacy'}</p>
   `;
-  section.append(nearbyCard, renderSellerAnalytics(), renderSellerMessagingGate());
+  const statusBadge = document.createElement('span');
+  statusBadge.className = `status-badge ${formatStatusClass(home.status)}`;
+  statusBadge.textContent = home.status || 'Status unavailable';
+  header.append(headerText, statusBadge);
+  details.append(header);
+
+  const topline = document.createElement('div');
+  topline.className = 'property-hero__topline';
+  topline.append(
+    renderHeroMetric('Asking price', formatCurrency(home.askingPrice)),
+    renderHeroMetric('Top match', formatPercent(home?.demandSnapshot?.topMatch ?? home.matchScore, 0)),
+    renderHeroMetric('Matching buyers', `${home?.demandSnapshot?.matchCount ?? home.matchedBuyers ?? 0}`),
+  );
+  details.append(topline);
+
+  if (home.summary) {
+    const summary = document.createElement('p');
+    summary.className = 'property-hero__summary';
+    summary.textContent = home.summary;
+    details.append(summary);
+  }
+
+  const specsList = document.createElement('dl');
+  specsList.className = 'hero-specs';
+  const specs = [
+    { label: 'Type', value: home.specs?.type || home.type || '—' },
+    { label: 'Beds', value: Number.isFinite(home.specs?.beds) ? `${home.specs.beds} bd` : '—' },
+    { label: 'Baths', value: Number.isFinite(home.specs?.baths) ? `${home.specs.baths} ba` : '—' },
+    { label: 'Size', value: home.specs?.size || '—' },
+    { label: 'Parking', value: home.specs?.parking || '—' },
+    { label: 'Built', value: home.specs?.built || '—' },
+  ];
+  specs.forEach(({ label, value }) => {
+    const block = document.createElement('div');
+    block.innerHTML = `<dt>${label}</dt><dd>${value}</dd>`;
+    specsList.append(block);
+  });
+  details.append(specsList);
+
+  const actions = document.createElement('div');
+  actions.className = 'property-hero__actions';
+  const editButton = document.createElement('button');
+  editButton.className = 'ghost-button';
+  editButton.type = 'button';
+  editButton.textContent = 'Edit listing';
+  const shareButton = document.createElement('button');
+  shareButton.className = 'ghost-button';
+  shareButton.type = 'button';
+  shareButton.textContent = 'Share to agent';
+  const messageButton = document.createElement('button');
+  messageButton.className = 'primary-button';
+  messageButton.type = 'button';
+  messageButton.textContent = canMessage() ? 'Message matched buyers' : 'Upgrade to contact matched buyers';
+  actions.append(editButton, shareButton, messageButton);
+  details.append(actions);
+
+  editButton.addEventListener('click', () => openEditListingModal(home));
+  shareButton.addEventListener('click', () => openShareModal(home));
+  messageButton.addEventListener('click', () => {
+    if (!canMessage()) {
+      openUpgradePrompt();
+      return;
+    }
+    openChat(`property-${home.id}`, 'Matched buyers');
+  });
+
+  const media = document.createElement('figure');
+  media.className = 'property-hero__media';
+  const img = document.createElement('img');
+  img.src = home.heroImage || 'https://images.unsplash.com/photo-1505691723518-36a5ac3be353?auto=format&fit=crop&w=1200&q=80';
+  img.alt = `${home.nickname || 'Property'} primary photo`;
+  img.loading = 'lazy';
+  media.append(img);
+
+  section.append(details, media);
   return section;
 }
 
-function compute10kmBuyerStats(home, regions) {
-  // Fallbacks if we don’t have exact coordinates
-  const result = { total: 0, strong: 0, moderate: 0, low: 0 };
-  const validRegions = Array.isArray(regions) ? regions.filter(r => isFinite(r.lat) && isFinite(r.lng)) : [];
-  if (!home || !isFinite(home?.lat) || !isFinite(home?.lng) || !validRegions.length) {
-    // Derive some totals from available hotspot counts as a soft fallback
-    const approxTotal = validRegions.reduce((sum, r) => sum + (r.buyers || 0), 0);
-    result.total = approxTotal;
-    result.strong = Math.round(approxTotal * 0.35);
-    result.moderate = Math.round(approxTotal * 0.45);
-    result.low = Math.max(0, approxTotal - result.strong - result.moderate);
-    return result;
-  }
-  const within = validRegions.filter(r => haversineKm(home.lat, home.lng, r.lat, r.lng) <= 10);
-  const total = within.reduce((sum, r) => sum + (r.buyers || 0), 0);
-  // Split by simple heuristic based on home match summary
-  const top = Math.min(0.6, Math.max(0.25, (getPropertyMatchSummary(home).topScore || 70) / 100 - 0.2));
-  result.total = total;
-  result.strong = Math.round(total * top);
-  result.moderate = Math.round(total * (0.55 - (top - 0.25)));
-  result.low = Math.max(0, total - result.strong - result.moderate);
-  return result;
+function formatStatusClass(status) {
+  if (!status) return 'status-badge--unknown';
+  const normalised = status.toString().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return `status-badge--${normalised || 'unknown'}`;
 }
 
-function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371; // km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+function renderHeroMetric(label, value) {
+  const metric = document.createElement('div');
+  metric.className = 'hero-metric';
+  metric.innerHTML = `
+    <h3>${value ?? '—'}</h3>
+    <p class="section-description">${label}</p>
+  `;
+  return metric;
 }
-function toRad(v) { return (v * Math.PI) / 180; }
+
+function renderDemandSnapshotSection(home) {
+  const section = document.createElement('section');
+  section.className = 'section demand-snapshot';
+  section.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Demand snapshot</h2>
+        <p class="section-description">Server-rendered KPIs refreshed when matches update.</p>
+      </div>
+    </div>
+  `;
+
+  const ribbon = document.createElement('div');
+  ribbon.className = 'upgrade-ribbon';
+  ribbon.innerHTML = `
+    <span>Unlock buyer profiles & secure chat</span>
+    <button class="primary-button" type="button">Upgrade</button>
+  `;
+  ribbon.querySelector('button').addEventListener('click', () => openUpgradePrompt());
+  section.querySelector('.section-header')?.append(ribbon);
+
+  const snapshot = home.demandSnapshot || {};
+  const grid = document.createElement('div');
+  grid.className = 'kpi-grid';
+  grid.append(
+    renderKpiTile('Matching buyers', snapshot.matchCount ?? home.matchedBuyers ?? 0),
+    renderKpiTile('Top match', formatPercent(snapshot.topMatch ?? home.matchScore, 0)),
+    renderKpiTile('Pre-approved buyers', snapshot.preapprovedCount ?? 0),
+    renderKpiTile('New in last 7 days', snapshot.newSince ?? 0, { subtext: 'Auto-refreshes nightly' }),
+  );
+  section.append(grid, createInfoBanner('Snapshot updates within 10 seconds of saving listing changes.'));
+  return section;
+}
+
+function renderKpiTile(label, value, { subtext } = {}) {
+  const card = document.createElement('article');
+  card.className = 'kpi-card';
+  card.innerHTML = `
+    <h3>${value ?? '—'}</h3>
+    <p>${label}</p>
+    ${subtext ? `<span class="kpi-subtext">${subtext}</span>` : ''}
+  `;
+  return card;
+}
+
+function renderWishlistFitSection(home) {
+  const section = document.createElement('section');
+  section.className = 'section wishlist-fit';
+  section.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Wishlist fit</h2>
+        <p class="section-description">Breakdown of how this property scores across weighted buyer requirements.</p>
+      </div>
+    </div>
+  `;
+
+  const fit = home.wishlistFit || {};
+  const grid = document.createElement('div');
+  grid.className = 'wishlist-fit__grid';
+  grid.append(
+    createFitBar('Location fit (highest weight)', fit.location),
+    createFitBar('Price fit (gate)', fit.price, 'If the listing price exceeds a buyer’s max budget the match score is 0.'),
+    createFitBar('Must-haves covered', fit.mustHave, `${formatPercent(fit.mustHave, 0)} of required features met.`),
+    createFitBar('Nice-to-haves covered', fit.niceToHave, `${formatPercent(fit.niceToHave, 0)} of optional features hit.`),
+  );
+  section.append(grid, createInfoBanner('Match score = (Location × %location) + (Feature × %feature) + (Lifestyle × %amenity). Price is a gate.', 'muted'));
+  return section;
+}
+
+function createFitBar(label, value, description) {
+  const bar = document.createElement('div');
+  bar.className = 'fit-bar';
+  const numeric = Number(value);
+  const ratio = Number.isFinite(numeric) ? (numeric > 1 ? numeric / 100 : numeric) : 0;
+  const pct = Math.max(0, Math.min(1, ratio));
+  bar.innerHTML = `
+    <div class="fit-bar__header">
+      <span>${label}</span>
+      <strong>${formatPercent(pct, 0)}</strong>
+    </div>
+    <div class="fit-bar__meter"><span style="width:${(pct * 100).toFixed(1)}%"></span></div>
+    ${description ? `<p class="section-description">${description}</p>` : ''}
+  `;
+  return bar;
+}
+
+function renderBuyerMatchesSection(home) {
+  const section = document.createElement('section');
+  section.className = 'section buyer-matches';
+  section.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Buyer matches</h2>
+        <p class="section-description">Sorted by match score. Open a row to see why the match scored that way.</p>
+      </div>
+    </div>
+  `;
+
+  if (!canSeeSnippets()) {
+    section.append(createInfoBanner('Buyer identities and messaging unlock with Seller · Pro. Aggregated insights remain visible.', 'warning'));
+  }
+
+  const matches = Array.isArray(home.buyerMatches) ? home.buyerMatches : [];
+  if (!matches.length) {
+    section.append(createEmptyState('We’re tracking buyers in your area. Matches will appear as new wishlists align to this property.'));
+    return section;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'matches-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th scope="col">Buyer</th>
+        <th scope="col">Match %</th>
+        <th scope="col">Mortgage</th>
+        <th scope="col">Budget vs price</th>
+        <th scope="col">Timeline</th>
+        <th scope="col">Location overlap</th>
+        <th scope="col">Must-haves</th>
+        <th scope="col" class="align-right">Action</th>
+      </tr>
+    </thead>
+  `;
+  const tbody = document.createElement('tbody');
+  matches.forEach((match) => {
+    const alias = canSeeSnippets() ? (match.alias || 'Buyer (anonymised)') : (match.maskedAlias || 'Buyer · upgrade required');
+    const row = document.createElement('tr');
+    row.className = 'match-row';
+    const matchClass = match.matchPercent >= 85 ? 'chip--high' : match.matchPercent >= 70 ? 'chip--mid' : 'chip--low';
+    row.innerHTML = `
+      <td>
+        <div class="match-alias">
+          <span>${alias}</span>
+          ${match.isNew ? '<span class="chip chip--new">New</span>' : ''}
+        </div>
+      </td>
+      <td><span class="chip ${matchClass}">${formatPercent(match.matchPercent, 0)}</span></td>
+      <td><span class="status-dot ${match.preApproved ? 'status-dot--success' : 'status-dot--pending'}">${match.preApproved ? 'Pre-approved' : 'Not yet'}</span></td>
+      <td>${describeBudgetAlignment(match, home.askingPrice)}</td>
+      <td>${match.timeline || '—'}</td>
+      <td>${match.locationTag || home.location || '—'}</td>
+      <td>${summarizeMustHaveStatus(match)}</td>
+      <td class="align-right"><button class="ghost-button match-cta" type="button">${canMessage() ? 'Message' : 'Unlock messaging'}</button></td>
+    `;
+
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'match-detail';
+    detailRow.hidden = true;
+
+    let detailContent = '';
+    if (canSeeSnippets()) {
+      const met = Array.isArray(match.mustHaveStatus?.met) && match.mustHaveStatus.met.length
+        ? `<ul>${match.mustHaveStatus.met.map((item) => `<li>${item}</li>`).join('')}</ul>`
+        : '<p class="section-description">No specific must-haves logged.</p>';
+      const gaps = Array.isArray(match.mustHaveStatus?.missing) && match.mustHaveStatus.missing.length
+        ? `<ul>${match.mustHaveStatus.missing.map((item) => `<li>${item}</li>`).join('')}</ul>`
+        : '<p class="section-description">No conflicts.</p>';
+      detailContent = `
+        <div class="match-breakdown">
+          <div>
+            <h4>Why it fits</h4>
+            <p>${match.summary || 'Score breakdown is recalculating.'}</p>
+            <div class="match-features">
+              <div>
+                <h5>Must-haves met</h5>
+                ${met}
+              </div>
+              <div>
+                <h5>Gaps</h5>
+                ${gaps}
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4>Score drivers</h4>
+            ${renderContributionList(match.contributions)}
+          </div>
+        </div>
+      `;
+    } else {
+      detailContent = '<div class="locked-message">Upgrade to Seller · Pro to view factor-level breakdowns and buyer context.</div>';
+    }
+
+    detailRow.innerHTML = `<td colspan="8">${detailContent}</td>`;
+
+    const ctaButton = row.querySelector('.match-cta');
+    ctaButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (!canMessage()) {
+        openUpgradePrompt();
+      } else {
+        openChat(`property-${home.id}-${match.id}`, alias);
+      }
+    });
+
+    row.addEventListener('click', () => {
+      const willOpen = detailRow.hidden;
+      detailRow.hidden = !willOpen;
+      row.classList.toggle('is-open', willOpen);
+    });
+
+    tbody.append(row, detailRow);
+  });
+  table.append(tbody);
+  section.append(table);
+  return section;
+}
+
+function renderFeatureFitSection(home) {
+  const section = document.createElement('section');
+  section.className = 'section feature-fit';
+  section.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Feature-fit matrix</h2>
+        <p class="section-description">Aggregated from matched buyer must-haves to surface upgrade guidance.</p>
+      </div>
+    </div>
+  `;
+
+  const features = Array.isArray(home.featureFitMatrix) ? home.featureFitMatrix : [];
+  const matrix = document.createElement('div');
+  matrix.className = 'feature-matrix';
+
+  if (!features.length) {
+    matrix.append(createEmptyState('Matrix will populate once enough buyer matches share must-have data.'));
+  } else {
+    features.forEach((item) => {
+      const card = document.createElement('article');
+      card.className = 'feature-card';
+      if (!item.propertyHas) {
+        card.classList.add('feature-card--gap');
+      }
+      card.innerHTML = `
+        <header>
+          <h3>${item.feature}</h3>
+          <span class="chip ${item.propertyHas ? 'chip--high' : 'chip--warning'}">${formatPercent(item.requiredPercent ?? 0, 0)} require</span>
+        </header>
+        <p class="section-description">${item.insight || 'Insight pending recalculation.'}</p>
+        <p class="feature-card__status">${item.propertyHas ? 'This listing: ✓' : 'This listing: ✗'}</p>
+      `;
+      matrix.append(card);
+    });
+  }
+
+  section.append(matrix);
+  return section;
+}
+
+function renderPricePositioningSection(home) {
+  const section = document.createElement('section');
+  section.className = 'section price-position';
+  section.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Price positioning vs buyer budgets</h2>
+        <p class="section-description">Distribution of matched buyers by maximum budget with asking price overlay.</p>
+      </div>
+    </div>
+  `;
+
+  const buckets = Array.isArray(home.priceBuckets) ? home.priceBuckets : [];
+  const histogram = document.createElement('div');
+  histogram.className = 'price-histogram';
+
+  if (!buckets.length) {
+    const empty = createEmptyState('Budget histogram appears once buyers match this property.');
+    empty.classList.add('histogram-empty');
+    histogram.append(empty);
+  } else {
+    const maxCount = Math.max(...buckets.map((b) => b.count || 0), 1);
+    buckets.forEach((bucket) => {
+      const bar = document.createElement('div');
+      bar.className = 'price-bar';
+      const height = Math.max(4, Math.round(((bucket.count || 0) / maxCount) * 100));
+      bar.innerHTML = `
+        <div class="price-bar__value" style="height:${height}%"></div>
+        <span class="price-bar__count">${bucket.count ?? 0}</span>
+        <span class="price-bar__label">${bucket.label}</span>
+      `;
+      histogram.append(bar);
+    });
+
+    const budgets = buckets
+      .map((bucket) => bucket.maxBudget)
+      .filter((value) => Number.isFinite(value));
+    const minBudget = budgets.length ? Math.min(...budgets, home.askingPrice || 0) : home.askingPrice || 0;
+    const maxBudget = budgets.length ? Math.max(...budgets, home.askingPrice || 0) : home.askingPrice || 0;
+    const ratio = maxBudget === minBudget ? 0.5 : ((home.askingPrice || minBudget) - minBudget) / (maxBudget - minBudget);
+    const marker = document.createElement('div');
+    marker.className = 'price-histogram__marker';
+    marker.style.left = `${Math.min(100, Math.max(0, ratio * 100))}%`;
+    marker.innerHTML = `<span>${formatCurrency(home.askingPrice)} asking</span>`;
+    histogram.append(marker);
+  }
+
+  section.append(histogram);
+
+  const sim = home.simulation || {};
+  const whatIf = document.createElement('div');
+  whatIf.className = 'what-if-panel';
+  const heading = document.createElement('h3');
+  heading.textContent = 'What-if simulation';
+  whatIf.append(heading);
+
+  const priceRange = sim.priceRange || {};
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = `${priceRange.min ?? Math.round((home.askingPrice || 0) * 0.9)}`;
+  slider.max = `${priceRange.max ?? Math.round((home.askingPrice || 0) * 1.1)}`;
+  slider.step = `${priceRange.step ?? 1000}`;
+  slider.value = `${home.askingPrice || slider.min}`;
+
+  const sliderLabel = document.createElement('label');
+  sliderLabel.className = 'what-if-panel__label';
+  sliderLabel.textContent = 'Adjust asking price (±10%)';
+  const sliderRow = document.createElement('div');
+  sliderRow.className = 'what-if-panel__slider';
+  sliderRow.append(slider);
+  const priceReadout = document.createElement('span');
+  priceReadout.className = 'what-if-panel__value';
+  priceReadout.textContent = formatCurrency(Number(slider.value));
+  sliderRow.append(priceReadout);
+  sliderLabel.append(sliderRow);
+  whatIf.append(sliderLabel);
+
+  const togglesWrapper = document.createElement('div');
+  togglesWrapper.className = 'toggle-grid';
+  if (Array.isArray(sim.featureToggles) && sim.featureToggles.length) {
+    const toggleHeading = document.createElement('p');
+    toggleHeading.className = 'section-description';
+    toggleHeading.textContent = 'Toggle hypothetical feature upgrades to preview demand shifts.';
+    whatIf.append(toggleHeading);
+    sim.featureToggles.forEach((toggle) => {
+      const label = document.createElement('label');
+      label.className = 'toggle-option';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = toggle.id;
+      label.append(checkbox);
+      const copy = document.createElement('div');
+      copy.innerHTML = `<strong>${toggle.label}</strong><p class="section-description">${toggle.description || ''}</p>`;
+      label.append(copy);
+      togglesWrapper.append(label);
+    });
+    whatIf.append(togglesWrapper);
+  }
+
+  const projection = document.createElement('div');
+  projection.className = 'projection-metrics';
+  projection.innerHTML = `
+    <div>
+      <span class="label">Projected matching buyers</span>
+      <strong data-field="matches">${sim.baseMatchCount ?? home?.demandSnapshot?.matchCount ?? 0}</strong>
+    </div>
+    <div>
+      <span class="label">Projected top match %</span>
+      <strong data-field="top-match">${formatPercent(sim.baseTopMatch ?? home?.demandSnapshot?.topMatch ?? home.matchScore, 0)}</strong>
+    </div>
+  `;
+  whatIf.append(projection);
+
+  const updateProjection = () => {
+    const selectedToggles = [];
+    if (Array.isArray(sim.featureToggles)) {
+      sim.featureToggles.forEach((toggle) => {
+        const checkbox = togglesWrapper.querySelector(`input[value="${toggle.id}"]`);
+        if (checkbox?.checked) {
+          selectedToggles.push(toggle);
+        }
+      });
+    }
+    const price = Number(slider.value);
+    priceReadout.textContent = formatCurrency(price);
+    const { projectedMatches, projectedTopMatch } = projectSimulationOutcome(home, price, selectedToggles);
+    projection.querySelector('[data-field="matches"]').textContent = projectedMatches.toString();
+    projection.querySelector('[data-field="top-match"]').textContent = formatPercent(projectedTopMatch, 0);
+  };
+
+  if (!canSeeSnippets()) {
+    slider.disabled = true;
+    togglesWrapper.querySelectorAll('input').forEach((input) => { input.disabled = true; });
+    whatIf.append(createInfoBanner('Upgrade to Seller · Pro to run price simulations and feature toggles.', 'warning'));
+  } else {
+    slider.addEventListener('input', updateProjection);
+    togglesWrapper.addEventListener('change', updateProjection);
+    updateProjection();
+  }
+
+  section.append(whatIf);
+  return section;
+}
+
+function projectSimulationOutcome(home, price, selectedToggles = []) {
+  const sim = home.simulation || {};
+  const baseMatches = sim.baseMatchCount ?? home?.demandSnapshot?.matchCount ?? 0;
+  const baseTopMatch = sim.baseTopMatch ?? home?.demandSnapshot?.topMatch ?? home.matchScore ?? 0;
+  const basePrice = home.askingPrice || price;
+  const elasticity = sim.priceElasticity ?? 0.8;
+  const topSensitivity = sim.topMatchSensitivity ?? 10;
+  const priceDelta = basePrice ? (price - basePrice) / basePrice : 0;
+
+  let projectedMatches = baseMatches * (1 - elasticity * priceDelta);
+  let projectedTopMatch = baseTopMatch - priceDelta * topSensitivity;
+
+  selectedToggles.forEach((toggle) => {
+    const impact = toggle?.impact || {};
+    if (Number.isFinite(impact.matches)) {
+      projectedMatches += impact.matches;
+    }
+    if (Number.isFinite(impact.topMatch)) {
+      projectedTopMatch += impact.topMatch;
+    }
+  });
+
+  return {
+    projectedMatches: Math.max(0, Math.round(projectedMatches)),
+    projectedTopMatch: Math.max(0, Math.min(100, Math.round(projectedTopMatch))),
+  };
+}
+
+function renderDemandMapSection(home) {
+  if (canSeeSnippets()) {
+    const hotspots = Array.isArray(sellerHotspots)
+      ? sellerHotspots.map((region) => ({ ...region, count: region.buyers ?? region.count ?? 0 }))
+      : [];
+    return renderMapCard({
+      title: 'Who’s looking here',
+      description: 'Heatmap of wishlist locations covering this property. Counts remain anonymised.',
+      regions: hotspots,
+      formatter: (region) => `${region.count || 0} buyers searching here`,
+      emptyCopy: 'Demand map loads once buyer wishlists include this area.',
+    });
+  }
+
+  const section = document.createElement('section');
+  section.className = 'section map-locked';
+  section.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Who’s looking here</h2>
+        <p class="section-description">Upgrade to Seller · Pro to see anonymised geo heatmaps of buyer wishlists.</p>
+      </div>
+      <button class="primary-button" type="button">Upgrade</button>
+    </div>
+  `;
+  section.querySelector('button')?.addEventListener('click', () => openUpgradePrompt());
+
+  const total = (sellerHotspots || []).reduce((sum, region) => sum + (region.buyers || region.count || 0), 0);
+  const preview = document.createElement('div');
+  preview.className = 'map-locked__preview';
+  preview.innerHTML = `
+    <div class="map-locked__blur"></div>
+    <div class="map-locked__overlay">
+      <strong>${total} buyers</strong>
+      <span>tracking this broader area</span>
+      <p>Upgrade to view heatmap granularity without revealing identities.</p>
+    </div>
+  `;
+
+  const list = document.createElement('ul');
+  list.className = 'map-locked__list';
+  (sellerHotspots || []).slice(0, 3).forEach((region) => {
+    const item = document.createElement('li');
+    item.innerHTML = `<strong>${region.label}</strong><span>${region.buyers || region.count || 0} buyers</span>`;
+    list.append(item);
+  });
+
+  section.append(preview, list);
+  return section;
+}
+
+function renderSellerActionPanel(home) {
+  const section = document.createElement('section');
+  section.className = 'section action-panel';
+  section.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Action panel</h2>
+        <p class="section-description">Keep momentum with demand-driven next steps.</p>
+      </div>
+    </div>
+  `;
+
+  const actions = [
+    {
+      label: 'Edit listing',
+      description: 'Update specs, media, or disclosures to refresh the match engine.',
+      locked: false,
+      handler: () => openEditListingModal(home),
+    },
+    {
+      label: 'Invite / link agent',
+      description: 'Share a read-only demand snapshot with your agent or advisor.',
+      locked: false,
+      handler: () => openShareModal(home, { mode: 'agent' }),
+    },
+    {
+      label: 'Message matched buyers',
+      description: 'Start anonymised chats inside the platform (no PII exchange).',
+      locked: !canMessage(),
+      handler: () => {
+        if (!canMessage()) {
+          openUpgradePrompt();
+        } else {
+          openChat(`property-${home.id}`, 'Matched buyers');
+        }
+      },
+    },
+    {
+      label: 'Share demand snapshot (Pro)',
+      description: 'Generate a shareable view with masked buyer data.',
+      locked: !canSeeSnippets(),
+      handler: () => {
+        if (!canSeeSnippets()) {
+          openUpgradePrompt();
+        } else {
+          openShareModal(home, { mode: 'snapshot' });
+        }
+      },
+    },
+  ];
+
+  const list = document.createElement('ul');
+  list.className = 'action-list';
+  actions.forEach((action) => {
+    const item = document.createElement('li');
+    if (action.locked) item.classList.add('is-locked');
+    item.innerHTML = `
+      <div>
+        <strong>${action.label}</strong>
+        <p class="section-description">${action.description}</p>
+      </div>
+      <button class="${action.locked ? 'ghost-button' : 'primary-button'}" type="button">${action.locked ? 'Upgrade to unlock' : 'Open'}</button>
+    `;
+    const button = item.querySelector('button');
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      action.handler();
+    });
+    list.append(item);
+  });
+
+  section.append(list);
+  return section;
+}
 
 function renderPropertyCard(profile) {
   // Try template first
@@ -891,81 +1461,6 @@ function renderPropertyCard(profile) {
     msgBtn.addEventListener('click', () => openChat(`property-${profile?.id || 'unknown'}`, 'Matched buyers'));
   }
   card.querySelector('.view-insights').addEventListener('click', () => openPropertyInsights(profile));
-  return card;
-}
-
-function renderSellerAnalytics() {
-  if (!sellerAnalytics) {
-    console.error('sellerAnalytics data not available');
-    return document.createElement('div');
-  }
-
-  const analytics = document.createElement('section');
-  analytics.className = 'section';
-  analytics.innerHTML = `
-    <div class="section-header">
-      <h2>Demand analytics</h2>
-      <p class="section-description">Aggregate demand across budgets, feature priorities, geography, and timelines.</p>
-    </div>
-  `;
-
-  const grid = document.createElement('div');
-  grid.className = 'analytics-grid';
-
-  const budgetCard = document.createElement('article');
-  budgetCard.className = 'analytics-card';
-  budgetCard.innerHTML = `
-    <h3>Buyer budget distribution</h3>
-    ${(sellerAnalytics.budgetDistribution || []).map((item) => renderMetric(item?.label || 'Unknown', item?.value || 0)).join('')}
-  `;
-
-  const featureCard = document.createElement('article');
-  featureCard.className = 'analytics-card';
-  featureCard.innerHTML = `
-    <h3>Top requested buyer features</h3>
-    <ul>${(sellerAnalytics.featureDemand || []).map((feature) => `<li>${feature || 'Unknown feature'}</li>`).join('')}</ul>
-  `;
-
-  const timelineCard = document.createElement('article');
-  timelineCard.className = 'analytics-card';
-  timelineCard.innerHTML = `
-    <h3>Buyer timeline urgency</h3>
-    ${(sellerAnalytics.timelineDemand || []).map((item) => renderMetric(item?.label || 'Unknown', item?.value || 0)).join('')}
-  `;
-
-  const trendsCard = document.createElement('article');
-  trendsCard.className = 'analytics-card locked-card';
-  trendsCard.innerHTML = `
-    <h3>Trends & compare (Seller · Pro)</h3>
-    <p>${sellerAnalytics.paidInsights?.trendsLockedCopy || 'Upgrade to unlock trends and comparison features.'}</p>
-    <button class="ghost-button" type="button">Upgrade to unlock trends</button>
-  `;
-  const upgradeButton = trendsCard.querySelector('button');
-  if (upgradeButton) {
-    upgradeButton.addEventListener('click', () => openUpgradePrompt());
-  }
-
-  grid.append(budgetCard, featureCard, timelineCard, trendsCard);
-  analytics.append(grid);
-  return analytics;
-}
-
-function renderSellerMessagingGate() {
-  const card = document.createElement('section');
-  card.className = 'section';
-  card.innerHTML = `
-    <div class="section-header">
-      <h2>Messaging</h2>
-      <p class="section-description">Only Seller · Pro and Agent · Pro accounts can initiate anonymised chats with matched buyers.</p>
-    </div>
-    <div class="empty-state">
-      Upgrade required to start a conversation.
-      <div class="form-actions" style="justify-content:center;margin-top:1rem;">
-        <button class="primary-button" type="button">Upgrade to contact buyers</button>
-      </div>
-    </div>
-  `;
-  card.querySelector('button').addEventListener('click', () => openUpgradePrompt());
   return card;
 }
 
@@ -1457,36 +1952,121 @@ function archiveWishlist(buyerId, wishlistId) {
   renderApp();
 }
 
-function openPropertyInsights(profile) {
-  modalTitle.textContent = `${profile.nickname} · Buyer demand`;
-  const locationScore = Math.min(100, profile.matchScore + 5);
-  const featureScore = Math.max(0, profile.matchScore - 6);
-  const timelineScore = Math.round(profile.matchScore * 0.6);
+function openEditListingModal(home) {
+  modalTitle.textContent = 'Edit listing';
+  modalContent.innerHTML = `
+    <form class="form-grid">
+      <label>
+        <span>Asking price</span>
+        <input type="number" value="${home.askingPrice || ''}" />
+      </label>
+      <label>
+        <span>Status</span>
+        <select>
+          ${['Active', 'Under Contract', 'Off-market preview'].map((status) => `<option value="${status}" ${status === home.status ? 'selected' : ''}>${status}</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        <span>Headline summary</span>
+        <textarea rows="3">${home.summary || ''}</textarea>
+      </label>
+      <p class="section-description">Saving pushes updates to the match engine and refreshes the demand snapshot within 10 seconds.</p>
+      <div class="form-actions">
+        <button class="ghost-button" type="button" id="cancel-edit-listing">Cancel</button>
+        <button class="primary-button" type="submit">Save changes</button>
+      </div>
+    </form>
+  `;
+  modalContent.querySelector('#cancel-edit-listing')?.addEventListener('click', () => modal.close());
+  modalContent.querySelector('form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    modal.close();
+  });
+  modal.showModal();
+}
 
+function openShareModal(home, { mode } = {}) {
+  const shareMode = mode || 'agent';
+  const isSnapshot = shareMode === 'snapshot';
+  modalTitle.textContent = isSnapshot ? 'Share demand snapshot' : 'Share with agent';
+  const urlFragment = `${home.id}-${shareMode}`;
+  const shareUrl = `https://reach.example.com/share/${urlFragment}`;
   modalContent.innerHTML = `
     <div class="form-grid">
-      <div>
-        <h3>Match quality</h3>
-        ${renderMetric('Location overlap', locationScore)}
-        ${renderMetric('Feature fit', featureScore)}
-        ${renderMetric('Timeline alignment', timelineScore)}
-      </div>
-      <div>
-        <h3>Buyer demand</h3>
-        <p>${profile.matchedBuyers} buyers currently match this Property Profile.</p>
-        <p>${profile.gapHint}</p>
-        <p>${profile.topWishlistSnippet}</p>
-      </div>
-      <div>
-        <h3>Upgrade message</h3>
-        <p>Upgrade to Seller · Pro to unlock buyer wishlist snippets, historical trends, and in-app messaging.</p>
-        <div class="form-actions">
-          <button class="primary-button" type="button">Upgrade to contact buyers</button>
-        </div>
+      <p>${isSnapshot
+        ? 'Generate a read-only view of buyer demand with masked data. Recipients see aggregates but no PII.'
+        : 'Invite an agent to collaborate on this Property Profile. They will see anonymised demand data.'}</p>
+      <label>
+        <span>Share link</span>
+        <input type="text" value="${shareUrl}" readonly />
+      </label>
+      <div class="form-actions">
+        <button class="ghost-button" type="button" id="close-share-modal">Close</button>
+        <button class="primary-button" type="button" id="copy-share-link">Copy link</button>
       </div>
     </div>
   `;
-  modalContent.querySelector('button').addEventListener('click', () => openUpgradePrompt());
+  modalContent.querySelector('#close-share-modal')?.addEventListener('click', () => modal.close());
+  modalContent.querySelector('#copy-share-link')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(shareUrl).catch(() => {});
+    }
+    const btn = event.currentTarget;
+    if (btn) {
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy link'; }, 1600);
+    }
+  });
+  modal.showModal();
+}
+
+function openPropertyInsights(profile) {
+  const snapshot = profile.demandSnapshot || {};
+  const fit = profile.wishlistFit || {};
+  modalTitle.textContent = `${profile.nickname || 'Property profile'} · Demand insights`;
+
+  modalContent.innerHTML = `
+    <div class="form-grid">
+      <article class="analytics-card">
+        <h3>Demand snapshot</h3>
+        <p><strong>${snapshot.matchCount ?? profile.matchedBuyers ?? 0}</strong> matching buyers</p>
+        <p><strong>${formatPercent(snapshot.topMatch ?? profile.matchScore, 0)}</strong> top match</p>
+        <p><strong>${snapshot.preapprovedCount ?? 0}</strong> pre-approved buyers</p>
+      </article>
+      <article class="analytics-card">
+        <h3>Wishlist fit</h3>
+        <ul>
+          <li>Location: ${formatPercent(fit.location, 0)}</li>
+          <li>Price: ${formatPercent(fit.price, 0)} (gate)</li>
+          <li>Must-haves: ${formatPercent(fit.mustHave, 0)}</li>
+          <li>Nice-to-haves: ${formatPercent(fit.niceToHave, 0)}</li>
+        </ul>
+        <p class="section-description">${profile.gapHint || 'Gaps will appear as the match engine compares buyer must-haves.'}</p>
+      </article>
+      <article class="analytics-card">
+        <h3>Next step</h3>
+        <p>${canSeeSnippets()
+          ? 'Start conversations with top matches or share a demand snapshot with your advisor.'
+          : 'Upgrade to Seller · Pro to unlock buyer profiles, run what-if simulations, and message matches.'}</p>
+        <div class="form-actions">
+          <button class="${canSeeSnippets() ? 'ghost-button' : 'primary-button'}" type="button">${canSeeSnippets() ? 'Close' : 'Upgrade to contact buyers'}</button>
+        </div>
+      </article>
+    </div>
+  `;
+
+  const actionButton = modalContent.querySelector('button');
+  if (actionButton) {
+    actionButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (canSeeSnippets()) {
+        modal.close();
+      } else {
+        openUpgradePrompt();
+      }
+    });
+  }
   modal.showModal();
 }
 
@@ -1693,6 +2273,13 @@ function renderMetric(label, value) {
   `;
 }
 
+function createInfoBanner(message, variant = 'neutral') {
+  const banner = document.createElement('div');
+  banner.className = `info-banner info-banner--${variant}`;
+  banner.textContent = message;
+  return banner;
+}
+
 function createSection({ title, description }) {
   const section = document.createElement('section');
   section.className = 'section';
@@ -1715,6 +2302,62 @@ function createEmptyState(message) {
 function formatCurrency(value) {
   if (!value) return '$0';
   return `$${Number(value).toLocaleString()}`;
+}
+
+function formatPercent(value, decimals = 0) {
+  if (value === undefined || value === null || Number.isNaN(Number(value))) return '—';
+  const numeric = Number(value);
+  const ratio = Math.abs(numeric) <= 1 ? numeric : numeric / 100;
+  return `${(ratio * 100).toFixed(decimals)}%`;
+}
+
+function describeBudgetAlignment(match, price) {
+  if (!match?.budget) return '—';
+  const min = Number(match.budget.min);
+  const max = Number(match.budget.max);
+  if (!Number.isFinite(price)) {
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      return `${formatCurrency(min)} - ${formatCurrency(max)}`;
+    }
+    return Number.isFinite(max) ? `${formatCurrency(max)} max` : 'Budget undisclosed';
+  }
+
+  if (Number.isFinite(max) && price > max) {
+    return `Above buyer max (${formatCurrency(max)})`;
+  }
+  if (Number.isFinite(min) && price < min) {
+    return `Below preferred range (${formatCurrency(min)} min)`;
+  }
+  if (Number.isFinite(max)) {
+    return `${formatCurrency(price)} of ${formatCurrency(max)} max`;
+  }
+  return `${formatCurrency(price)} aligned`;
+}
+
+function summarizeMustHaveStatus(match) {
+  const met = Array.isArray(match?.mustHaveStatus?.met) ? match.mustHaveStatus.met.length : 0;
+  const missing = Array.isArray(match?.mustHaveStatus?.missing) ? match.mustHaveStatus.missing.length : 0;
+  const total = met + missing;
+  if (!total) return '<span class="musthave-chip">—</span>';
+  const missingList = Array.isArray(match?.mustHaveStatus?.missing) && match.mustHaveStatus.missing.length
+    ? `Missing: ${match.mustHaveStatus.missing.join(', ')}`
+    : 'All must-haves satisfied';
+  const className = missing ? 'musthave-chip musthave-chip--gap' : 'musthave-chip musthave-chip--pass';
+  const icon = missing ? '✗' : '✓';
+  return `<span class="${className}" title="${missingList}">${icon} ${met}/${total} met</span>`;
+}
+
+function renderContributionList(contributions) {
+  if (!Array.isArray(contributions) || !contributions.length) {
+    return '<p class="section-description">Score drivers will appear after the next match recalculation.</p>';
+  }
+  return `
+    <ul class="contribution-list">
+      ${contributions
+        .map((item) => `<li><span>${item.factor || 'Factor'}</span><strong>${formatPercent(item.value ?? 0, 0)}</strong></li>`)
+        .join('')}
+    </ul>
+  `;
 }
 
 function simulateMatchSummary(data) {
