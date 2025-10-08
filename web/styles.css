@@ -1273,6 +1273,59 @@ body {
   gap: 1.5rem;
 }
 
+.buyer-sidebar {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px dashed rgba(37, 99, 235, 0.4);
+  border-radius: 1rem;
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.buyer-sidebar__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.buyer-sidebar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.buyer-sidebar__link {
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: #fff;
+  color: #1e3a8a;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.buyer-sidebar__link:hover {
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.2);
+  transform: translateY(-1px);
+}
+
+.buyer-sidebar__link:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.8);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+}
+
+.buyer-account-card .card-body {
+  gap: 1rem;
+}
+
 .wishlist-v2__fit-card {
   display: grid;
   gap: 1rem;

@@ -15,7 +15,7 @@ This plan breaks down the work needed to deliver the Wishlist Builder (v2), /mar
   - Create `AreaList` UI to display drawn/saved areas with editing controls.
   - Wire components together with state management (Context or Redux) and synchronization to backend models.
 - **Dependencies:** Requires area geometry data (from initiative C) and consistent area weighting schema.
-- **Deliverables / DoD Alignment:** Drawing and listing areas must match acceptance criteria; all updated APIs covered by contract tests.
+- **Deliverables / DoD Alignment:** Drawing and wishlist areas must match acceptance criteria; all updated APIs covered by contract tests.
 
 ### FE-02 Implement AreasSuggestInput → `/areas/suggest`
 - **Goal:** Add autosuggest input that queries the backend for area suggestions.
@@ -46,11 +46,11 @@ This plan breaks down the work needed to deliver the Wishlist Builder (v2), /mar
 - **Deliverables / DoD Alignment:** Shows data for relevant CMAs with <45-day freshness; includes telemetry events.
 
 ### FE-05 Detail View Components: `SnapshotTiles`, `FitBreakdown`, `MatchedHomesTable`
-- **Goal:** Present detailed wishlist summaries and matched homes.
+- **Goal:** Present detailed wishlist summaries and matching homes (owners).
 - **Key Tasks:**
   - Implement reusable visual tiles summarizing key metrics.
   - Build `FitBreakdown` component illustrating must-have vs nice-to-have alignment.
-  - Create `MatchedHomesTable` with sortable listings and quick actions.
+  - Create `MatchedHomesTable` with sortable matching homes (owners) view and quick actions.
   - Integrate telemetry for user interactions.
 - **Dependencies:** Requires filter outputs and matched homes data sources.
 - **Deliverables / DoD Alignment:** Components meet checklist acceptance criteria and pass contract tests where applicable.

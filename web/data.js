@@ -1,3 +1,39 @@
+export const homeShares = [
+  {
+    id: 'share-1',
+    wishlistId: 'wishlist-1',
+    homeId: 'home-1',
+    grantedAt: '2024-03-18T16:05:00Z',
+    scope: {
+      alias: true,
+      specs: true,
+      priceExpectation: true,
+      timeline: true,
+      area: true,
+      insights: true,
+      address: false,
+      photos: false,
+    },
+  },
+  {
+    id: 'share-2',
+    wishlistId: 'wishlist-1',
+    homeId: 'home-sim-417',
+    grantedAt: '2024-02-01T08:00:00Z',
+    revokedAt: '2024-03-01T12:00:00Z',
+    scope: {
+      alias: true,
+      specs: true,
+      priceExpectation: true,
+      timeline: false,
+      area: false,
+      insights: false,
+      address: false,
+      photos: false,
+    },
+  },
+];
+
 export const buyers = [
   {
     id: 'buyer-1',

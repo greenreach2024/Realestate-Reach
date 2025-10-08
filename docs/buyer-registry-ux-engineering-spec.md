@@ -1,7 +1,7 @@
 # Realestate Ready – UX & Engineering Specification
 
 ## 0. Purpose & Positioning
-Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flipping the marketplace logic. Instead of showcasing public seller listings, the platform publishes **Buyer Wishlists** so that supply-side users can analyse real demand. Sellers and agents keep their **Home Profiles** private and use the analytics workspace to decide when and how to engage buyers. No personally identifiable information (PII) is surfaced in public views, and all conversations stay inside the product with anonymised aliases.
+Realestate Ready mirrors the familiar navigation and polish of MLS.ca while flipping the marketplace logic. Instead of showcasing public seller ads, the platform publishes **Buyer Wishlists** so that supply-side users can analyse real demand. Sellers and agents keep their **Home Profiles** private and use the analytics workspace to decide when and how to engage buyers. No personally identifiable information (PII) is surfaced in public views, and all conversations stay inside the product with anonymised aliases.
 
 - **Public surface**: anonymised Buyer Wishlists with geo context, budget bands, feature priorities, and match scores.
 - **Private surface**: Home Profiles owned by sellers or agents. They never appear in public search results.
@@ -46,10 +46,10 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 - All outreach remains in-app with anonymised identities. No PII is shown by default in any workflow.
 
 ## 2. Web Application Screens
-### 2.1 Buyer Experience (mirrors MLS listing browsing)
+### 2.1 Buyer Experience (mirrors MLS-style browsing)
 1. **Buyer Dashboard (My Wishlists)**
    - Map component centred on selected neighbourhoods. Hover states display `Matched {N} home profiles` per polygon/pin.
-   - Wishlist cards styled like MLS listings but summarising the buyer's requirements. Each card shows:
+   - Wishlist cards styled like MLS search results but summarising the buyer's requirements. Each card shows:
      - Target areas (pins/polygons/radii) and priority
      - Budget range, property type, bedrooms/bathrooms, timeline
      - Must-have and nice-to-have tags
