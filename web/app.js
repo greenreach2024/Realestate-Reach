@@ -8,7 +8,13 @@ import {
   notifications,
   subscriptions,
   onboardingFlows,
+  homeShares,
 } from './data.js';
+import {
+  buildHomeShareIndex,
+  getHomeShareGrant,
+  shareAllowsField,
+} from './sharing.js';
 import { auth, renderAuthActions, renderLoginPage, renderRegistrationPage } from './auth.js';
 
 const budgetBenchmarks = {
@@ -34,6 +40,9 @@ const state = {
   sellerTier: 'free',
   selectedWishlistId: buyers?.[0]?.wishlists?.[0]?.id ?? null,
 };
+
+const homeShareIndex = buildHomeShareIndex(homeShares);
+const SHARE_PRIVACY_MESSAGE = 'Owners choose if/what to share.';
 
 // Gating helpers for Seller/Agent
 function canSeeSnippets() {
@@ -458,6 +467,7 @@ function renderBuyerExperience() {
 function renderWishlistProfile(buyer, wishlist) {
   const container = document.createElement('section');
   container.className = 'wishlist-v2';
+  container.id = 'buyer-wishlists';
 
   container.append(
     renderWishlistHeader(buyer, wishlist),
@@ -747,10 +757,77 @@ function renderWishlistBody(wishlist) {
 
   const aside = document.createElement('aside');
   aside.className = 'wishlist-v2__aside';
-  aside.append(renderBudgetCoachCard(wishlist));
+  aside.append(
+    renderBuyerSidebar(),
+    renderBudgetCoachCard(wishlist),
+    renderBuyerAccountCard(),
+  );
 
   body.append(main, aside);
   return body;
+}
+
+function renderBuyerSidebar() {
+  const nav = document.createElement('nav');
+  nav.className = 'buyer-sidebar';
+  nav.setAttribute('aria-label', 'Buyer navigation');
+
+  const title = document.createElement('h3');
+  title.className = 'buyer-sidebar__title';
+  title.textContent = 'Quick links';
+  nav.append(title);
+
+  const list = document.createElement('ul');
+  list.className = 'buyer-sidebar__list';
+
+  const items = [
+    { label: 'Wishlists', target: '#buyer-wishlists' },
+    { label: 'Budget Coach', target: '#buyer-budget-coach' },
+    { label: 'Messages', target: '#buyer-messages' },
+    { label: 'Account', target: '#buyer-account' },
+  ];
+
+  items.forEach((item) => {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'buyer-sidebar__link';
+    button.textContent = item.label;
+    button.addEventListener('click', () => {
+      const target = typeof item.target === 'string' && item.target.startsWith('#')
+        ? document.querySelector(item.target)
+        : null;
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+    li.append(button);
+    list.append(li);
+  });
+
+  nav.append(list);
+  return nav;
+}
+
+function renderBuyerAccountCard() {
+  const card = document.createElement('article');
+  card.className = 'card buyer-account-card';
+  card.id = 'buyer-account';
+  card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <h3>Account & privacy</h3>
+        <p class="section-description">Manage your profile and communication preferences without sharing PII.</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <p>Buyers stay anonymous until they accept a homeowner's request to connect. Control disclosure from the Messages tab.</p>
+      <button class="ghost-button" type="button">Open account settings</button>
+    </div>
+  `;
+
+  card.querySelector('button')?.addEventListener('click', () => window.gotoView?.('subscription'));
+  return card;
 }
 
 function renderWishlistFitCard(wishlist) {
@@ -818,7 +895,7 @@ function renderMatchedHomesCard(wishlist) {
   card.innerHTML = `
     <div class="card-header">
       <div>
-        <h3>Matched homes</h3>
+        <h3>Matching homes (owners)</h3>
         <p class="section-description">Owners stay masked until they opt in. Fit % uses the same scoring contract the seller dashboard sees.</p>
       </div>
     </div>
@@ -867,8 +944,21 @@ function createMatchTableRow(match, wishlist) {
   const row = document.createElement('tr');
   row.className = 'wishlist-v2__match-row';
 
+  const shareGrant = getHomeShareGrant(homeShareIndex, wishlist.id, match.homeId);
+  const allowAlias = shareAllowsField(shareGrant, 'alias');
+  const allowSpecs = shareAllowsField(shareGrant, 'specs');
+  const allowArea = shareAllowsField(shareGrant, 'area');
+  const allowTimeline = shareAllowsField(shareGrant, 'timeline');
+  const allowInsights = shareAllowsField(shareGrant, 'insights');
+
   const nameCell = document.createElement('td');
-  nameCell.innerHTML = `<strong>${match.maskedAlias ?? match.alias}</strong><div class="wishlist-v2__match-subtitle">${match.alias ?? ''}</div>`;
+  const aliasDisplay = allowAlias
+    ? (match.alias ?? match.maskedAlias ?? 'Home · masked')
+    : (match.maskedAlias ?? 'Home · masked');
+  const subtitleCopy = allowAlias && match.alias
+    ? 'Homeowner approved this share.'
+    : SHARE_PRIVACY_MESSAGE;
+  nameCell.innerHTML = `<strong>${aliasDisplay}</strong><div class="wishlist-v2__match-subtitle">${subtitleCopy}</div>`;
   if (match.newThisWeek) {
     const badge = document.createElement('span');
     badge.className = 'badge badge--accent wishlist-v2__match-badge';
@@ -880,19 +970,21 @@ function createMatchTableRow(match, wishlist) {
   fitCell.textContent = `${match.fitPercent ?? '—'}%`;
 
   const priceCell = document.createElement('td');
-  priceCell.textContent = summarizeOwnerExpectation(wishlist, match);
+  priceCell.textContent = summarizeOwnerExpectation(wishlist, match, shareGrant);
 
   const typeCell = document.createElement('td');
-  typeCell.textContent = match.type ?? '—';
+  typeCell.textContent = allowSpecs ? (match.type ?? '—') : SHARE_PRIVACY_MESSAGE;
 
   const bedsCell = document.createElement('td');
-  bedsCell.textContent = `${match.beds ?? '—'} / ${match.baths ?? '—'}`;
+  bedsCell.textContent = allowSpecs
+    ? `${match.beds ?? '—'} / ${match.baths ?? '—'}`
+    : SHARE_PRIVACY_MESSAGE;
 
   const areaCell = document.createElement('td');
-  areaCell.textContent = match.areaTag ?? '—';
+  areaCell.textContent = allowArea ? (match.areaTag ?? '—') : SHARE_PRIVACY_MESSAGE;
 
   const timelineCell = document.createElement('td');
-  timelineCell.textContent = match.timelineAlignment ?? '—';
+  timelineCell.textContent = allowTimeline ? (match.timelineAlignment ?? '—') : SHARE_PRIVACY_MESSAGE;
 
   row.append(nameCell, fitCell, priceCell, typeCell, bedsCell, areaCell, timelineCell);
 
@@ -902,32 +994,39 @@ function createMatchTableRow(match, wishlist) {
 
   const drawerCell = document.createElement('td');
   drawerCell.colSpan = 7;
-  const factorList = Array.isArray(match.factors)
-    ? match.factors
-    : [
-        { label: 'Location coverage', value: match.fitBreakdown?.location ?? 0.8 },
-        { label: 'Price fit', value: match.fitBreakdown?.price ?? 0.8 },
-        { label: 'Must-have coverage', value: match.fitBreakdown?.mustHave ?? 0.8 },
-        { label: 'Nice-to-have coverage', value: match.fitBreakdown?.niceToHave ?? 0.6 },
-      ];
+  if (allowInsights) {
+    const factorList = Array.isArray(match.factors)
+      ? match.factors
+      : [
+          { label: 'Location coverage', value: match.fitBreakdown?.location ?? 0.8 },
+          { label: 'Price fit', value: match.fitBreakdown?.price ?? 0.8 },
+          { label: 'Must-have coverage', value: match.fitBreakdown?.mustHave ?? 0.8 },
+          { label: 'Nice-to-have coverage', value: match.fitBreakdown?.niceToHave ?? 0.6 },
+        ];
 
-  const factors = document.createElement('ul');
-  factors.className = 'wishlist-v2__match-factors';
-  factorList.forEach((factor) => {
-    const item = document.createElement('li');
-    item.innerHTML = `
-      <span>${factor.label}</span>
-      <span>${formatPercent(factor.value)}</span>
-      <p>${factor.note ?? ''}</p>
-    `;
-    factors.append(item);
-  });
+    const factors = document.createElement('ul');
+    factors.className = 'wishlist-v2__match-factors';
+    factorList.forEach((factor) => {
+      const item = document.createElement('li');
+      item.innerHTML = `
+        <span>${factor.label}</span>
+        <span>${formatPercent(factor.value)}</span>
+        <p>${factor.note ?? ''}</p>
+      `;
+      factors.append(item);
+    });
 
-  const note = document.createElement('p');
-  note.className = 'wishlist-v2__match-note';
-  note.textContent = match.note ?? 'Score drivers surface here after the owner shares more data.';
+    const note = document.createElement('p');
+    note.className = 'wishlist-v2__match-note';
+    note.textContent = match.note ?? 'Score drivers surface here after the owner shares more data.';
 
-  drawerCell.append(factors, note);
+    drawerCell.append(factors, note);
+  } else {
+    const privacyNote = document.createElement('p');
+    privacyNote.className = 'wishlist-v2__match-note';
+    privacyNote.textContent = SHARE_PRIVACY_MESSAGE;
+    drawerCell.append(privacyNote);
+  }
   drawer.append(drawerCell);
 
   row.addEventListener('click', () => {
@@ -943,6 +1042,7 @@ function renderBudgetCoachCard(wishlist) {
   const market = wishlist.market ?? {};
   const card = document.createElement('article');
   card.className = 'card wishlist-v2__coach-card';
+  card.id = 'buyer-budget-coach';
 
   const header = document.createElement('div');
   header.className = 'card-header';
@@ -1208,12 +1308,15 @@ function initWishlistMap(mapId, wishlist) {
   }, 60);
 }
 
-function summarizeOwnerExpectation(wishlist, match) {
+function summarizeOwnerExpectation(wishlist, match, shareGrant) {
+  if (!shareAllowsField(shareGrant, 'priceExpectation')) {
+    return SHARE_PRIVACY_MESSAGE;
+  }
   const expectation = Number(match.priceExpectation);
   const minBudget = Number(wishlist?.budget?.min);
   const maxBudget = Number(wishlist?.budget?.max);
   if (!Number.isFinite(expectation)) {
-    return 'Owner expectation undisclosed';
+    return SHARE_PRIVACY_MESSAGE;
   }
   if (Number.isFinite(maxBudget) && expectation > maxBudget) {
     return `${formatCurrency(expectation)} · above your ${formatCurrency(maxBudget)} max`;
@@ -1339,6 +1442,7 @@ function renderBuyerInsights(buyer) {
 function renderBuyerMessaging(buyer) {
   const messagingSection = document.createElement('section');
   messagingSection.className = 'section';
+  messagingSection.id = 'buyer-messages';
   messagingSection.innerHTML = `
     <div class="section-header">
       <h2>Messages</h2>

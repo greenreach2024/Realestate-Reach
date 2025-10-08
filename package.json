@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "node api/server.js"
+    "start": "node api/server.js",
+    "test": "node --test web/sharing.test.js"
   }
 }
