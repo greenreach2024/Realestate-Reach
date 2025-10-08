@@ -152,3 +152,8 @@ This plan breaks down the work needed to deliver the Wishlist Builder (v2), /mar
 - **Rollout Plan:** Coordinate feature flags and staged rollout to internal users before GA.
 - **Documentation:** Update user guides and developer docs for new components and APIs.
 
+## G. Why this fits the project
+- Reasserts the marketplace thesis: buyers articulate their needs while sellers decide how and when to expose Home Profiles and initiate outreach. No inventory-style searching is introduced.
+- Leverages the existing technical stack—React front end, Node/Django services, Postgres with search extensions, and the established match engine with price gating—while focusing scope on RBAC tightening and refined UI copy.
+- Aligns with the UX specification’s role-based access model and reliance on in-app messaging, preserving privacy expectations and Canadian PIPEDA compliance throughout the end-to-end flow.
+
