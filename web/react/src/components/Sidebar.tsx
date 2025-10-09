@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'wishlists', label: 'Wishlists', href: '/wishlists', roles: ['buyer'], icon: '📝' },
   { id: 'budget', label: 'Budget Coach', href: '/budget-coach', roles: ['buyer'], icon: '💡' },
   { id: 'messages', label: 'Messages', href: '/messages', roles: ['buyer', 'seller', 'agent'], icon: '💬' },
+  { id: 'account', label: 'Account', href: '/account', roles: ['buyer', 'seller', 'agent'], icon: '👤' },
   { id: 'homes', label: 'Home Portfolio', href: '/homes', roles: ['seller', 'agent'], icon: '🏠' },
   { id: 'buyers', label: 'Buyers', href: '/buyers', roles: ['seller', 'agent'], icon: '🤝' }
 ];

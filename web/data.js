@@ -383,7 +383,7 @@ export const buyers = [
       },
     ],
     notifications: [
-      { id: 'note-1', type: 'match', message: 'New Home Profile matches Port Moody Family Haven at 91%.' },
+      { id: 'note-1', type: 'match', message: 'New owner match scored 91% for Port Moody Family Haven. Owner decides what to share.' },
       { id: 'note-2', type: 'trend', message: 'Demand in Olympic Village is trending +7% week over week.' },
     ],
   },

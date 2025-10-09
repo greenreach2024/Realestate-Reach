@@ -101,7 +101,7 @@ const SIDEBAR_ITEMS = [
   { id: 'buyer-wishlists', label: 'Wishlists', icon: '📝', view: 'role', roles: ['buyer'], role: 'buyer' },
   { id: 'buyer-budget', label: 'Budget Coach', icon: '📈', view: 'budget-coach', roles: ['buyer'], role: 'buyer' },
   { id: 'buyer-messages', label: 'Messages', icon: '💬', view: 'messages', roles: ['buyer'], role: 'buyer' },
-  { id: 'buyer-account', label: 'Account & Privacy', icon: '🛡️', view: 'account', roles: ['buyer'], role: 'buyer' },
+  { id: 'buyer-account', label: 'Account', icon: '🛡️', view: 'account', roles: ['buyer'], role: 'buyer' },
   { id: 'seller-homes', label: 'My Homes', icon: '🏠', view: 'seller-homes', roles: ['seller'], role: 'seller' },
   { id: 'seller-matches', label: 'Buyer Matches', icon: '🎯', view: 'seller-matches', roles: ['seller'], role: 'seller' },
   { id: 'seller-insights', label: 'Insights', icon: '📊', view: 'seller-insights', roles: ['seller'], role: 'seller' },
@@ -798,7 +798,7 @@ function renderBuyerBudgetCoachView() {
   const wishlist = buyer?.wishlists?.find((w) => w.id === state.selectedWishlistId) ?? buyer?.wishlists?.[0] ?? null;
   const section = createSection({
     title: 'Budget Coach',
-    description: 'Track how your price guardrails align with live market shifts. No listings are surfaced — only demand context.',
+    description: 'Track how your price guardrails align with live market shifts. Owners choose if/what to share — demand context only.',
   });
 
   if (wishlist) {
@@ -1129,7 +1129,7 @@ function renderWishlistSnapshot(wishlist) {
 
   const guardrail = document.createElement('p');
   guardrail.className = 'wishlist-v2__snapshot-note';
-  guardrail.textContent = 'No public listings. Counts and scores only until a seller opts in.';
+  guardrail.textContent = 'Owners choose if/what to share. Counts and scores only until a seller opts in.';
   wrapper.append(guardrail);
 
   return wrapper;
@@ -1611,8 +1611,8 @@ function renderBuyerInsights(buyer) {
   section.className = 'section';
   section.innerHTML = `
     <div class="section-header">
-      <h2>Wishlist insights</h2>
-      <p class="section-description">Counts and scores only until a seller opts in. Track demand gaps for each wishlist.</p>
+      <h2>Review your Wishlist</h2>
+      <p class="section-description">Matching homes (owners): count only. Owners choose if/what to share.</p>
     </div>
   `;
 
@@ -1713,7 +1713,7 @@ function renderBuyerNotifications(buyer) {
   section.innerHTML = `
     <div class="section-header">
       <h2>Notifications</h2>
-      <p class="section-description">Stay informed about new matches, inbound outreach, and area trend shifts.</p>
+      <p class="section-description">Counts and fit alerts only — owners decide when to surface property details.</p>
     </div>
   `;
 
@@ -2736,7 +2736,7 @@ function renderAgentHomesView() {
       <div class="card-header">
         <div>
           <h3>${home.nickname || home.location || 'Home Profile'}</h3>
-          <p class="section-description">${home.summary || 'Private listing — demand only.'}</p>
+          <p class="section-description">${home.summary || 'Private home — demand only.'}</p>
         </div>
         <span class="badge">${home.status || 'Inactive'}</span>
       </div>
