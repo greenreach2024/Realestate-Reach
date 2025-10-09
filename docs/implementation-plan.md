@@ -152,6 +152,29 @@ This plan breaks down the work needed to deliver the Wishlist Builder (v2), /mar
 - **Rollout Plan:** Coordinate feature flags and staged rollout to internal users before GA.
 - **Documentation:** Update user guides and developer docs for new components and APIs.
 
+## Security, Compliance, and Access Control
+- **In-App Messaging Only:** All buyer–seller communication continues to flow through the existing messaging service. Do not introduce email/SMS previews; ensure notification copy avoids exposing PII outside the authenticated app context.
+- **Privacy Notes at Gates:** Every upgrade gate, paywall, or sensitive form must include inline privacy language reinforcing how personal data is handled before data entry occurs. Copy updates ship with UX approval and screenshots captured during QA.
+- **RBAC Enforcement:** Sensitive endpoints—including buyer profiles, matchmaking results, and chat threads—must respect the role matrix defined in the Buyer Registry UX spec. Reuse the existing policy middleware and add regression tests for agent, buyer, seller, and unauthenticated roles.
+- **Audit Coverage:** Expand audit logging to capture gate impressions, role check failures, and access-denied events. Logs feed the compliance dashboard with the same retention window specified in SECURITY.md.
+- **PII Handling:** Sanitize telemetry payloads and analytics events so that user identifiers map to hashed IDs; never send raw emails, phone numbers, or addresses to Mixpanel/GA.
+
+## Two-Sprint Build Plan
+
+### Sprint A — Value Before Sign-Up
+- **Public Buyer Stepper:** Implement the wishlist quick-start with an anonymous session token, live match count, and guardrails preventing access to gated buyer profile content.
+- **Public Seller Demand Estimator:** Surface aggregate demand counts and top match percentages derived from the matchmaking backend while keeping individual buyer data hidden.
+- **Agent Analytics Teaser:** Ship a limited heatmap preview with two trend tiles sourced from existing analytics; ensure teasers stop at the upgrade gate with inline privacy notes.
+- **Upgrade Gate & Plan Modals:** Connect the modal flow to the current subscription backend, enforcing RBAC so that only eligible roles see the upgrade paths.
+- **Landing Page Refresh:** Update the hero, MLS vs. Buyer Registry comparison strip, and Demand Pulse module, coordinating copy with marketing and legal for compliance review.
+
+### Sprint B — App Polish & Workflow
+- **Single-Question Onboarding Steppers:** Replace the current multi-question flow for buyers and sellers with single-question steppers that respect RBAC and surface privacy context near sensitive inputs.
+- **Match Score Chips & UI Redesign:** Refresh list and card layouts with match score chips, ensuring scores appear only for authorized viewers.
+- **Messages UI Refresh:** Update thread lists and readers, reaffirming in-app messaging boundaries and confirming RBAC tests cover archived conversations.
+- **System States:** Add empty states, skeleton loaders, and notification banners consistent with the design system and privacy guidelines.
+- **Analytics & Funnels:** Wire Mixpanel/GA events for the new flows, verifying PII scrubbing and role-aware event metadata.
+
 ## G. Why this fits the project
 - Reasserts the marketplace thesis: buyers articulate their needs while sellers decide how and when to expose Home Profiles and initiate outreach. No inventory-style searching is introduced.
 - Leverages the existing technical stack—React front end, Node/Django services, Postgres with search extensions, and the established match engine with price gating—while focusing scope on RBAC tightening and refined UI copy.
