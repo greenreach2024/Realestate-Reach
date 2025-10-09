@@ -59,7 +59,7 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 
 2. **Create/Edit Wishlist Wizard**
    - Step 1 – Areas: add postal codes, draw polygons/radii, or drop pins; supports priorities.
-   - Step 2 – Budget & Timeline: capture min/max, move-in window, and pre-approval toggle (controls badge).
+   - Step 2 – Budget & Timeline: capture min/max, move-in window (`When do you want to move?`), and pre-approval toggle (controls badge). Immediately show prompt copy `Verified pre-approval increases your visibility.`
    - Step 3 – Property Details: property type, bedrooms, bathrooms, optional size range.
    - Step 4 – Features: split must-haves and nice-to-haves.
    - Step 5 – Review: show normalised payload ready for persistence and the immediate analytics call (`Matches: N; Top score: Y%`).
@@ -76,7 +76,16 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
      }
      ```
 
-3. **Buyer Analytics (Wishlist Insights)**
+3. **Buyer Quick-Start (Public, No Sign-up)**
+   - 60-second stepper launched from the public homepage with `Try it without signing up` CTA.
+   - **Step 1 – Where should this home be?** Postal code input backed by `/areas/suggest` plus optional map pin or polygon draw.
+   - **Step 2 – What’s your budget range?** Inline `Live affordability hints` panel pulling `/market-trends` ranges for context.
+   - **Step 3 – Must-haves vs nice-to-haves?** Present 3–5 toggles with tap-to-prioritise UI. Copy: `Must-have or nice-to-have?`
+   - Persistent `Live match preview` chip shows `We’re seeing {N} potential matches in your areas` as criteria change.
+   - Completion state: `We’re matching now…` → `We’re seeing {N} potential matches like this in your areas.` Primary CTA `Save & see details` (opens save wall email prompt). Secondary CTA `Refine` loops back into the stepper.
+   - On save, quick-start converts into a full wishlist payload and hands off to in-app onboarding.
+
+4. **Buyer Analytics (Wishlist Insights)**
    - `Supply vs Me` tile summarising match counts, score ranges, and notable gaps.
    - Gap hints example: `Typical profiles nearby: 2 baths; you require 3`.
    - Optional trend tile per area when data exists (e.g., `Demand in Area A rising 8% this month`).
@@ -99,7 +108,13 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
    - Step-based flow: approximate address/pin, core details (type, beds, baths, size, parking, age), feature tags, optional private media upload.
    - On save, immediately call match summary endpoint and show counts + score.
 
-3. **Demand Analytics (Seller Insights)**
+3. **Seller Demand Estimator (Public Teaser)**
+   - Public mini-form requiring: location (postal code or map pin), property type, bedrooms, bathrooms, price expectation.
+   - Immediately calls match summary endpoint and returns anonymised counts only: `14 active buyers match this home. Top match: 82%.`
+   - Suppress buyer names/photos; display upgrade gate: `Contact these buyers securely` → plan modal leading to subscription flow.
+   - When a visitor creates an account, pre-populate a draft Home Profile with supplied inputs.
+
+4. **Demand Analytics (Seller Insights)**
    - Budget distribution of matched buyers, feature demand alignment, geographic heat, and timeline demand.
    - Trends and compare views unlocked behind the paid wall.
 
@@ -116,6 +131,22 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 ### 2.3 Agent & Mortgage Views
 - Agents gain regional analytics, multi-home match orchestration, and messaging similar to seller paid tier but scaled for multiple homes.
 - Mortgage agents access buyers who opted in or lack pre-approval, with secure chat templates and compliance-ready disclosures.
+
+#### Agent Analytics Teaser (Public)
+- Public surface features a region picker feeding a heatmap preview plus two trend tiles: `Top features this week` and `Budget distribution`.
+- Clicking any teaser prompts sign-up for Pro; full drill-downs, filters, and exports remain gated in-app.
+
+### 2.4 Public Marketing Surfaces
+- **Homepage hero:** three primary CTAs (Buyer, Seller, Agent) each with declarative statements. Avoid icons/emojis unless functional.
+- **How we’re different band:** slim table comparing MLS (supply-led) vs Buyer Registry (demand-led) with clear column headers.
+- **Live Demand Pulse module:** anonymised counters derived from wishlist/match aggregates (e.g., `Buyers currently seeking 3-bed homes in Burnaby: 126`). Update via streaming metrics; never reveal PII or individual wishlist data.
+- **Copy principles:** motivational microcopy within onboarding such as `Describe your next home—make it real.` and pre-approval prompt `Verified pre-approval increases your visibility.`
+- **Save wall:** email capture appears only when visitors attempt to save, message, or access gated analytics.
+
+### 2.5 Messaging UX (All Roles)
+- Threads mimic iMessage styling with clear read/unread states and attachment chips.
+- Maintain anonymised aliases; system prevents PII leakage in message body previews.
+- Upgrade prompts replace composer for non-subscribed sellers/agents; buyers always reply for free.
 
 ## 3. Map & Hover Behaviour
 - Shared map component reads geo layers (pins, polygons, radii) for both buyers and sellers.
