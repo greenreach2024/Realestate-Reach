@@ -46,6 +46,11 @@ Terminology: always refer to public artefacts as **Buyer Wishlists** and private
 - All outreach remains in-app with anonymised identities. No PII is shown by default in any workflow.
 
 ## 2. Web Application Screens
+### 2.0 Information Architecture
+- **Public navigation:** `Home`, `How it works`, `Start a Wishlist`, `Estimate Buyer Demand`, `Pricing`.
+- **In-app navigation (role-aware top nav):** `Dashboard`, `Matches`, `Messages`, role-specific workspace (`Listings` for sellers, `Wishlists` for buyers), `Analytics` (gated), and `Account`.
+- **Avatar menu:** includes role switcher enabling Buyers, Sellers, and Agents to move between workspaces when they hold multiple personas.
+
 ### 2.1 Buyer Experience (mirrors MLS listing browsing)
 1. **Buyer Dashboard (My Wishlists)**
    - Map component centred on selected neighbourhoods. Hover states display `Matched {N} home profiles` per polygon/pin.
@@ -152,6 +157,16 @@ Each municipal import follows the same ETL shape: download → convert to GeoJSO
 - Central guard middleware checks both role and subscription tier before returning protected data or enabling messaging actions.
 - UI surfaces gating with disabled buttons and contextual tooltips (`Upgrade to contact buyers`).
 - Buyers remain free; sellers/agents must upgrade for detailed analytics and outreach.
+
+## 6. Measurement Plan & KPI Instrumentation
+Track the following conversion ladders and engagement events to validate uplift across core flows:
+
+- **Buyer acquisition funnel:** `Start Wishlist (public)` → `Saved Wishlist (account)` → `First Match Viewed` → `First Message Attempt (gated)`.
+- **Seller estimator funnel:** `Seller Estimator Start` → `View Match Count` → `Upgrade View` → `Conversion`.
+- **Agent revenue funnel:** `Agent Teaser Viewed` → `Trial` → `Pro Conversion`.
+- **Notification engagement:** Click-through rate on `New matches` and `Message received` alerts.
+
+These KPIs align directly with the matches, subscriptions, and notifications architecture laid out in this specification. Instrument telemetry at each step, expose aggregates in Analytics (when permitted by role), and feed them into experimentation dashboards to prove uplift.
 
 ## 5. Match Scoring Contract
 - Mandatory filters: location containment + price overlap.
