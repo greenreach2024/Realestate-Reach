@@ -60,9 +60,9 @@ export default function WishlistDetail() {
     return [
       {
         id: 'match-count',
-        label: 'Homes fitting today',
+        label: 'Matching homes (owners): count only',
         value: snapshot.matchCount.toLocaleString(),
-        description: 'Owners choose what to share — refresh daily for updates.'
+        description: 'Owners choose if/what to share. Numbers reflect anonymised demand.'
       },
       {
         id: 'top-fit',
@@ -72,21 +72,21 @@ export default function WishlistDetail() {
       },
       {
         id: 'new-since',
-        label: `New since ${new Date(snapshot.newSince.since).toLocaleDateString()}`,
+        label: `New owner interest since ${new Date(snapshot.newSince.since).toLocaleDateString()}`,
         value: snapshot.newSince.count,
-        description: 'Aggregate view — details unlock when owners share a Home Profile.'
+        description: 'Aggregate view — details unlock only after a Home Profile share grant.'
       }
     ];
   }, [snapshot]);
 
   if (status === 'loading' || status === 'idle') {
-    return <p role="status">Loading wishlist insights…</p>;
+    return <p role="status">Loading Wishlist review…</p>;
   }
 
   if (status === 'error') {
     return (
       <div role="alert">
-        <p>We couldn’t load this wishlist right now.</p>
+        <p>We couldn’t review this wishlist right now.</p>
         {error && <pre>{error}</pre>}
       </div>
     );
@@ -99,8 +99,8 @@ export default function WishlistDetail() {
   return (
     <div className="wishlist-detail">
       <header>
-        <h1>Wishlist insights</h1>
-        <p>Track how supply aligns with your goals — owners control what you can see until they share a Home Profile.</p>
+        <h1>Review your Wishlist</h1>
+        <p>Track how anonymised owner demand aligns with your goals — owners choose if/what to share until a Home Profile grant is issued.</p>
       </header>
 
       <KpiTiles tiles={tiles} />

@@ -5,7 +5,13 @@ import api from '../api/client';
 interface SharedHomeResponse {
   id: string;
   name: string;
-  address?: string | null;
+  address?:
+    | string
+    | null
+    | {
+        area?: string | null;
+        city?: string | null;
+      };
   area?: string | null;
   photos?: string[];
   description?: string;
@@ -62,15 +68,30 @@ export default function SharedHome() {
     return <p>No shared data for this home yet.</p>;
   }
 
-  const address = home.address ?? 'Address hidden — owner hasn’t shared this yet.';
-  const photos = home.photos ?? [];
+  let addressLine = 'Address hidden — owner hasn’t shared this yet.';
+  let localityLine: string | null = null;
+
+  if (typeof home.address === 'string' && home.address.trim()) {
+    addressLine = home.address.trim();
+  } else if (home.address && typeof home.address === 'object') {
+    const area = 'area' in home.address ? String(home.address.area ?? '').trim() : '';
+    const city = 'city' in home.address ? String(home.address.city ?? '').trim() : '';
+    const parts = [area, city].filter(Boolean);
+    localityLine = parts.length ? parts.join(', ') : null;
+  } else if (home.area) {
+    localityLine = home.area;
+  }
+
+  const photos = Array.isArray(home.photos) ? home.photos.filter((url): url is string => typeof url === 'string') : [];
 
   return (
     <article className="shared-home" aria-labelledby="shared-home-title">
       <header>
         <h1 id="shared-home-title">{home.name}</h1>
-        <p className="shared-home__address">{address}</p>
-        {home.area && <p className="shared-home__area">{home.area}</p>}
+        <p className="shared-home__address">{addressLine}</p>
+        {(localityLine || home.area) && (
+          <p className="shared-home__area">{localityLine ?? home.area}</p>
+        )}
       </header>
 
       {photos.length > 0 ? (

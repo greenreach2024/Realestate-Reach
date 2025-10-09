@@ -15,7 +15,7 @@ const KpiTiles: FC<KpiTilesProps> = ({ tiles }) => {
   if (!tiles.length) return null;
 
   return (
-    <section aria-label="Wishlist insights" className="kpi-tiles">
+    <section aria-label="Wishlist review metrics" className="kpi-tiles">
       <ul>
         {tiles.map((tile) => (
           <li key={tile.id}>
