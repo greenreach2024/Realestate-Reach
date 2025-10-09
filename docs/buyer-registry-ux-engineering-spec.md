@@ -204,7 +204,7 @@ These KPIs align directly with the matches, subscriptions, and notifications arc
 - Weighted factors (default): Location 50, Features 30, Lifestyle/Amenities 15, Timeline 5.
 - Example stored payload:
   ```json
-    {
+  {
       "homeId": "h123",
     "wishlistId": "w456",
     "score": 0.82,
@@ -217,19 +217,94 @@ These KPIs align directly with the matches, subscriptions, and notifications arc
     }
   }
   ```
-- Matches recalculate on wishlist or Home Profile updates and trigger relevant notifications.
 
-## 6. UI States & Empty States
+- Matches recalculate whenever a wishlist or Home Profile is updated and trigger relevant notifications.
+
+## 6. Component System (Minimal, Premium, Reusable)
+
+All new UI work should rely on a shared set of composable components so that landing pages, dashboards, and gated pro surfaces stay consistent. Each component is designed to offer a minimal implementation that can ship quickly, a premium treatment for revenue-driving moments, and reusable primitives for future features.
+
+### 6.1 Hero Section
+- Full-bleed container with responsive imagery or gradient wash and a single primary call-to-action.
+- Layout must support headline, subheading, CTA button, and optional supporting stats (e.g., match counts) stacked for mobile and aligned left on desktop.
+- Premium treatment adds subtle motion on background assets (respecting reduced-motion preferences) and can optionally embed demand stats as chips.
+
+### 6.2 Stepper Card
+- One-question-per-screen wizard card used in onboarding and wishlist/home profile flows.
+- Primary CTA is right-aligned; secondary (back/skip) CTA is left-aligned beneath copy.
+- Display progress dots across the bottom edge with accessible labels (`aria-current="step"`).
+- Include built-in validation messaging zones and skeleton state for async lookups.
+
+### 6.3 Match Score Chip
+- Pill chip visualising a 0–100% match score with a neutral-to-success color ramp.
+- Default ramp: 0–39% `--color-neutral-500`, 40–69% `--color-warning-500`, 70–100% `--color-success-500`.
+- Expose compact (`sm`) and standard (`md`) sizes for embedding inside cards and tables.
+
+### 6.4 Demand Tiles
+- Numeric headline with supporting label (e.g., `128 Buyers • Port Moody`).
+- Used across landing pages, dashboards, and analytics views; must support inline icons or sparklines.
+- Provide loading, empty, and premium states that highlight upgrade prompts when gated.
+
+### 6.5 Heatmap Canvas
+- Shared map canvas offering preview (free) and pro (paid) modes.
+- Preview mode shows aggregated hotspots and limited detail; pro mode unlocks filters, legend, and timeline scrubber.
+- Integrates hover states that snap to neighbourhood polygons and respects map parity rules defined earlier in the spec.
+
+### 6.6 Upgrade Gate Modal
+- Modal component combining value proposition bullets and a plan selector.
+- Should accept a dynamic list of plan tiers with pricing, features, and CTA actions.
+- Include testimonial or social-proof slot plus legal text area for billing copy.
+
+### 6.7 Empty States
+- Standardised copy block with icon/illustration slot and contextual action.
+- Default buyer empty state: “No matches yet—try widening your area or budget.”
+- Ensure variants exist for seller, agent, and mortgage dashboards, each pointing to the next best action.
+
+### 6.8 Skeletons
+- Provide skeleton loaders for list rows, charts, and maps.
+- Lists: avatar + text lines; Charts: bar/line placeholders; Map: blurred gradient overlay with shimmering effect.
+- All animations must be disabled when `prefers-reduced-motion` is set.
+
+### 6.9 Micro-interactions
+- Hover lift: elevate cards by 2–4 px with `--shadow-2` and smooth transition.
+- Focus rings: 2 px outline using brand primary color with sufficient contrast.
+- Respect `prefers-reduced-motion` by reducing durations and eliminating non-essential movement.
+
+## 7. Leading Questions & Statements (Copy Deck)
+
+Use the following prompts throughout hero sections, onboarding flows, and analytics tooltips. Keep punctuation and casing consistent; no emojis.
+
+### Buyer
+- “Where should your next chapter happen?”
+- “Which features are non-negotiable?”
+- “How soon do you want to move?”
+
+### Seller
+- “How many buyers are already waiting for a home like yours?”
+- “What’s special about your property?”
+- “Ready to meet your matches?”
+
+### Agent
+- “Where is buyer demand rising this week?”
+- “Which features are trending in your farm area?”
+
+### Mortgage
+- “Who needs pre-approval today?”
+- “Which budgets are moving fastest?”
+
+These prompts map directly to the wishlist model, seller demand analytics, and agent dashboards defined earlier in this specification.
+
+## 8. UI States & Empty States
 - Buyer empty: `No matches yet — widen your budget or add more areas.`
 - Seller empty: `We found 18 buyers in your area; top match 78%. Upgrade to view trends & contact.`
 - Messaging empty: `Upgrade required to start a conversation.`
 
-## 7. Compliance & Privacy
+## 9. Compliance & Privacy
 - No PII ever appears in UI strings or payloads.
 - All communications stay in-app and are logged.
 - Identity disclosures are explicit, gated, and audit logged.
 
-## 8. Engineering Notes
+## 10. Engineering Notes
 - Keep role/subscription checks in shared guards across frontend and API.
 - Recommended routing:
   - `/buyer/dashboard`, `/buyer/wishlists/:id`
